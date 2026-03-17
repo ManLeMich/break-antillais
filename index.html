@@ -371,27 +371,54 @@ function save(key, val) {
   try { localStorage.setItem('_ba_'+key, JSON.stringify(val)); } catch(e) {}
   db.ref('data/'+key).set(val !== undefined ? val : null).catch(function(e){ console.warn('FB write:',e); });
 }
+
+// Save single user by ID (prevents overwriting other users)
+function saveUserToFirebase(user) {
+  db.ref('data/users/'+user.id).set(user).catch(function(e){ console.warn('FB user write:',e); });
+  // Update local cache
+  var users = load('ba_users', []);
+  var idx = users.findIndex(function(u){ return u.id === user.id; });
+  if (idx >= 0) users[idx] = user; else users.push(user);
+  try { localStorage.setItem('_ba_ba_users', JSON.stringify(users)); } catch(e) {}
+}
+
 function loadFromFirebase(cb) {
-  db.ref('data').once('value').then(function(snap) {
-    var d = snap.val();
+  // Load both flat data and individual users
+  var promises = [
+    db.ref('data').once('value'),
+    db.ref('data/users').once('value')
+  ];
+  Promise.all(promises).then(function(results) {
+    var d = results[0].val();
     if (d) {
       Object.keys(d).forEach(function(k){
+        if (k === 'users') return; // handled separately
         try { localStorage.setItem('_ba_'+k, JSON.stringify(d[k])); } catch(e) {}
       });
+    }
+    // Merge individual users into ba_users array
+    var usersObj = results[1].val();
+    if (usersObj) {
+      var usersArr = Object.values(usersObj);
+      try { localStorage.setItem('_ba_ba_users', JSON.stringify(usersArr)); } catch(e) {}
     }
     cb();
   }).catch(function(){ cb(); });
 }
+
 function startFirebaseListeners() {
   // Real-time orders sync
   db.ref('data/ba_orders').on('value', function(snap){
     var v = snap.val();
     if (v !== null) try { localStorage.setItem('_ba_ba_orders', JSON.stringify(v)); } catch(e) {}
   });
-  // Real-time users sync
-  db.ref('data/ba_users').on('value', function(snap){
-    var v = snap.val();
-    if (v !== null) try { localStorage.setItem('_ba_ba_users', JSON.stringify(v)); } catch(e) {}
+  // Real-time individual users sync (prevents overwrite)
+  db.ref('data/users').on('value', function(snap){
+    var usersObj = snap.val();
+    if (usersObj) {
+      var usersArr = Object.values(usersObj);
+      try { localStorage.setItem('_ba_ba_users', JSON.stringify(usersArr)); } catch(e) {}
+    }
   });
 }
 
@@ -558,10 +585,8 @@ function setCurrentUser(user, remember) {
   }
 }
 function saveUser(user) {
-  var users = getUsers();
-  var idx = users.findIndex(function(u){ return u.id === user.id; });
-  if (idx >= 0) users[idx] = user; else users.push(user);
-  save('ba_users', users);
+  // Save individually in Firebase to prevent overwriting other users
+  saveUserToFirebase(user);
 }
 function saveOrder(order) {
   var orders = getOrders();
@@ -1117,6 +1142,7 @@ function openProduct(id) {
 
   html += '<div class="form-group mt-1"><label class="form-label">📝 Note cuisine (optionnel)</label>'
     +'<input class="form-input" id="prod-note" placeholder="Ex: sans oignon, extra sauce..."/></div>'
+    +'<button onclick="closeModal(&apos;m-product&apos;)" style="background:none;border:none;color:var(--muted);font-size:.82rem;cursor:pointer;padding:.25rem 0;display:flex;align-items:center;gap:.3rem;margin-bottom:.25rem">← Retour au menu</button>'
     +'<div style="display:flex;align-items:center;gap:.75rem;margin-top:.75rem">'
     +'<div style="font-family:var(--head);font-weight:800;font-size:1.2rem;color:var(--gold);background:var(--dark3);border:1.5px solid rgba(212,175,55,.25);border-radius:var(--radius-sm);padding:.65rem .9rem;white-space:nowrap" id="cart-btn-price">'+(p.isClassique?'—':fmt(p.price))+'</div>'
     +'<div style="display:flex;align-items:center;gap:.5rem">'
@@ -1469,22 +1495,56 @@ function showCheckout() {
 function getSlots(date,cfg) {
   var sp=cfg.start.split(':'),ep=cfg.end.split(':');
   var sh=+sp[0],sm=+sp[1],eh=+ep[0],em=+ep[1];
+  var max=cfg.maxSlot||8;
   var orders=getOrders().filter(function(o){return o.pickupDate===date&&o.status!=='cancelled';});
   var slots=[];
   while(sh*60+sm<eh*60+em){
     var t=(sh<10?'0':'')+sh+':'+(sm<10?'0':'')+sm;
-    var c=orders.filter(function(o){return o.pickupTime===t;}).length;
-    slots.push({time:t,count:c,ok:c<(cfg.maxSlot||8)});
+    // Count total items (not orders) for this slot
+    var itemCount=0;
+    orders.filter(function(o){return o.pickupTime===t;}).forEach(function(o){
+      itemCount+=o.items.reduce(function(s,i){return s+1;},0);
+    });
+    slots.push({time:t,count:itemCount,ok:itemCount<max});
     sm+=30; if(sm>=60){sh++;sm-=60;}
   }
   return slots;
 }
+
+// Find next available slot for a given item count
+function findNextAvailableSlot(date, itemCount, cfg) {
+  var slots = getSlots(date, cfg);
+  var max = cfg.maxSlot||8;
+  for (var i=0; i<slots.length; i++) {
+    if (slots[i].count + itemCount <= max) return slots[i].time;
+  }
+  return null;
+}
 function pickSlot(btn){
   document.querySelectorAll('.slot-btn').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on'); _slot=btn.dataset.t;
-  var i=document.getElementById('slot-info');
-  if(i) i.textContent='Creneau : '+_slot;
+  var itemCount = cart.reduce(function(s,i){return s+1;},0);
+  var cfg = getCfg();
+  var date = window._selectedDate||new Date().toISOString().split('T')[0];
+  var slots = getSlots(date, cfg);
+  var slotData = slots.find(function(s){return s.time===_slot;});
+  var info = document.getElementById('slot-info');
+  if (info) {
+    var remaining = (cfg.maxSlot||8) - (slotData?slotData.count:0);
+    if (slotData && slotData.count + itemCount > (cfg.maxSlot||8)) {
+      // Suggest next slot
+      var next = findNextAvailableSlot(date, itemCount, cfg);
+      info.innerHTML = '<span style="color:#f59e0b">⚠️ Ce creneau sera plein avec votre commande ('+(slotData.count+itemCount)+' articles).'+(next?' <button class="btn btn-sm" style="background:rgba(200,35,43,.2);color:var(--red);border:none;cursor:pointer;font-size:.78rem" onclick="autoSelectSlot(&quot;'+next+'&quot;)">→ Prendre '+next+' a la place</button>':'')+'</span>';
+    } else {
+      info.textContent = 'Creneau : '+_slot+' ('+remaining+' places restantes)';
+    }
+  }
   checkReady();
+}
+
+function autoSelectSlot(time) {
+  var btn = Array.from(document.querySelectorAll('.slot-btn')).find(function(b){return b.dataset.t===time;});
+  if (btn) pickSlot(btn);
 }
 function pickPayment(m){
   document.querySelectorAll('.pay-opt').forEach(function(b){b.classList.remove('on');});
@@ -3313,6 +3373,7 @@ function startCountdown() {
       };
       users.push(adminUser);
       save('ba_users', users);
+      saveUserToFirebase(adminUser);
     }
     var _initCfg = getCfg();
     if (_initCfg.supplementPrice) SUPPLEMENT_PRICE = _initCfg.supplementPrice;
