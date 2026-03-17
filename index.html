@@ -374,6 +374,7 @@ function save(key, val) {
 
 // Save single user by ID (prevents overwriting other users)
 function saveUserToFirebase(user) {
+  // Save individually to prevent overwrite
   db.ref('data/users/'+user.id).set(user).catch(function(e){ console.warn('FB user write:',e); });
   // Update local cache
   var users = load('ba_users', []);
@@ -383,20 +384,28 @@ function saveUserToFirebase(user) {
 }
 
 function loadFromFirebase(cb) {
-  db.ref('data/users').once('value').then(function(snap) {
-    var usersObj = snap.val();
-    if (usersObj) {
-      var usersArr = Object.values(usersObj);
-      try { localStorage.setItem('_ba_ba_users', JSON.stringify(usersArr)); } catch(e) {}
+  db.ref('data').once('value').then(function(snap) {
+    var d = snap.val() || {};
+    // Load all flat data
+    Object.keys(d).forEach(function(k){
+      if (k === 'users') return;
+      try { localStorage.setItem('_ba_'+k, JSON.stringify(d[k])); } catch(e) {}
+    });
+    // Merge users: from ba_users array (old format) + users object (new format)
+    var mergedUsers = {};
+    // Old format: ba_users is an array
+    var oldUsers = d['ba_users'] || [];
+    if (Array.isArray(oldUsers)) {
+      oldUsers.forEach(function(u){ if(u && u.id) mergedUsers[u.id] = u; });
     }
-    return db.ref('data').once('value');
-  }).then(function(snap) {
-    var d = snap.val();
-    if (d) {
-      Object.keys(d).forEach(function(k){
-        if (k === 'users') return;
-        try { localStorage.setItem('_ba_'+k, JSON.stringify(d[k])); } catch(e) {}
-      });
+    // New format: users is an object keyed by ID
+    var newUsers = d['users'] || {};
+    Object.keys(newUsers).forEach(function(id){
+      if (newUsers[id]) mergedUsers[id] = newUsers[id];
+    });
+    var usersArr = Object.values(mergedUsers);
+    if (usersArr.length > 0) {
+      try { localStorage.setItem('_ba_ba_users', JSON.stringify(usersArr)); } catch(e) {}
     }
     cb();
   }).catch(function(e){ console.warn('Firebase load error:', e); cb(); });
@@ -408,14 +417,22 @@ function startFirebaseListeners() {
     var v = snap.val();
     if (v !== null) try { localStorage.setItem('_ba_ba_orders', JSON.stringify(v)); } catch(e) {}
   });
-  // Real-time individual users sync (prevents overwrite)
-  db.ref('data/users').on('value', function(snap){
-    var usersObj = snap.val();
-    if (usersObj) {
-      var usersArr = Object.values(usersObj);
-      try { localStorage.setItem('_ba_ba_users', JSON.stringify(usersArr)); } catch(e) {}
-    }
-  });
+  // Real-time users sync - merge both formats
+  var mergeUsers = function() {
+    var mergedUsers = {};
+    db.ref('data/ba_users').once('value').then(function(s1){
+      var old = s1.val() || [];
+      if (Array.isArray(old)) old.forEach(function(u){ if(u&&u.id) mergedUsers[u.id]=u; });
+      return db.ref('data/users').once('value');
+    }).then(function(s2){
+      var newU = s2.val() || {};
+      Object.keys(newU).forEach(function(id){ if(newU[id]) mergedUsers[id]=newU[id]; });
+      var arr = Object.values(mergedUsers);
+      if (arr.length > 0) try { localStorage.setItem('_ba_ba_users', JSON.stringify(arr)); } catch(e) {}
+    });
+  };
+  db.ref('data/users').on('value', function(){ mergeUsers(); });
+  db.ref('data/ba_users').on('value', function(){ mergeUsers(); });
 }
 
 // ══════════════════════════════════════════════════════
@@ -3372,7 +3389,6 @@ function startCountdown() {
         points:0, notifs:[], createdAt:new Date().toISOString()
       };
       users.push(adminUser);
-      save('ba_users', users);
       saveUserToFirebase(adminUser);
     }
     var _initCfg = getCfg();
