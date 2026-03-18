@@ -8,6 +8,7 @@
 <title>Break Antillais</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <style>
 :root {
   --red: #C8232B;
@@ -347,6 +348,7 @@ html, body { background: var(--dark) !important; color: var(--text); font-family
 
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
 <script>
 
 'use strict';
@@ -363,6 +365,14 @@ var firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
+var messaging = null;
+try { messaging = firebase.messaging(); } catch(e) { console.log('FCM not available:', e); }
+
+// EmailJS init
+var EMAILJS_SERVICE = 'service_uez8gro';
+var EMAILJS_TEMPLATE = 'template_gs8itxh';
+var EMAILJS_KEY = 'LLbn9BnRqyy4NjYAW';
+try { emailjs.init(EMAILJS_KEY); } catch(e) { console.log('EmailJS not available:', e); }
 
 function load(key, def) {
   try { var v = localStorage.getItem('_ba_'+key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
@@ -495,15 +505,17 @@ function startFirebaseListeners() {
 
   // Listen for real-time notifications for current client
   if (user && !isAdmin) {
-    db.ref('notifs/'+user.id).on('child_added', function(snap) {
+    // Record session start time
+    var sessionStart = Date.now();
+    db.ref('notifs/'+user.id).orderByChild('at').on('child_added', function(snap) {
       var notif = snap.val();
       if (!notif) return;
-      // Only show if recent (last 30 seconds) to avoid showing old notifs on load
-      var age = (Date.now() - new Date(notif.at).getTime()) / 1000;
-      if (age < 30) {
-        toast(notif.title + ': ' + notif.body, 'info', 6000);
+      // Only show notifications that arrived after this session started
+      var notifTime = new Date(notif.at).getTime();
+      if (notifTime > sessionStart - 5000) { // 5s buffer for timing
+        toast(notif.title+' : '+notif.body, 'info', 6000);
         sendPushNotif(notif.title, notif.body);
-        if (navigator.vibrate) navigator.vibrate([200]);
+        if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
       }
     });
   }
@@ -713,6 +725,14 @@ function notify(userId, title, body) {
   saveUser(u);
   // Write to dedicated real-time notifs path in Firebase
   db.ref('notifs/'+userId+'/'+notif.id).set(notif).catch(function(e){});
+  // Queue for FCM push (background notification)
+  db.ref('push_queue/'+notif.id).set({
+    userId: userId,
+    title: title,
+    body: body,
+    at: notif.at,
+    sent: false
+  }).catch(function(e){});
   // If current user, show immediately
   var cur = getCurrentUser();
   if (cur && cur.id === userId) {
@@ -1689,8 +1709,42 @@ function confirmOrder(){
     saveOrder(order);
     notify(user.id,'✅ Commande confirmee !','Votre commande n°'+num+' est confirmee. Retrait a '+_slot+'.');
   },2000);
+  // Send email confirmation
+  sendOrderEmail(order, user, cfg);
   showOrderConfirm(order,cfg);
 }
+
+function sendOrderEmail(order, user, cfg) {
+  try {
+    if (typeof emailjs === 'undefined') { console.log('EmailJS not loaded'); return; }
+    var itemsList = order.items.map(function(i){
+      return '- ' + i.name + (i.details ? ' (' + i.details + ')' : '') + ' : ' + i.price.toFixed(2) + 'EUR';
+    }).join('\n');
+    var pickupDate = new Date(order.pickupDate).toLocaleDateString('fr-FR', {
+      weekday:'long', day:'numeric', month:'long'
+    });
+    var templateParams = {
+      email: user.email,
+      client_name: user.prenom,
+      order_number: order.orderNumber,
+      items: itemsList,
+      total: order.total.toFixed(2) + 'EUR',
+      pickup_date: pickupDate,
+      pickup_time: order.pickupTime,
+      payment: order.payment,
+      address: cfg.address
+    };
+    emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, templateParams)
+      .then(function() {
+        console.log('Email envoye avec succes');
+        toast('Email de confirmation envoye ! 📧', 'success', 4000);
+      })
+      .catch(function(e) {
+        console.log('EmailJS error:', e);
+      });
+  } catch(e) { console.log('Email error:', e); }
+}
+
 function showOrderConfirm(order,cfg){
   var pts=Math.floor(order.total)*(cfg.ptsPerEuro||10);
   var html='<div class="modal-overlay"><div class="modal">'
@@ -2593,7 +2647,12 @@ function updateMsgPreview() {
 }
 
 function getFilteredClients(target) {
-  var allClients = getUsers().filter(function(u){ return !u.role || u.role==='client'; });
+  var allUsers = getUsers();
+  // If no users in cache, try to get from Firebase sync
+  if (!allUsers.length) {
+    toast('Chargement des clients...', 'info', 2000);
+  }
+  var allClients = allUsers.filter(function(u){ return !u.role || u.role==='client'; });
   var now = new Date();
   if (target === 'all') return allClients;
   if (target === 'inactive' || target === 'inactive30') {
@@ -2627,22 +2686,43 @@ function sendAdminMessage() {
   var title = (document.getElementById('msg-title').value||'').trim();
   var body = (document.getElementById('msg-body').value||'').trim();
   if (!title || !body) { toast('Titre et message requis','error'); return; }
-  var clients = getFilteredClients(target);
-  if (!clients.length) { toast('Aucun client correspond','warning'); return; }
-  var expiry = document.getElementById('msg-expiry');
-  var expiryVal = expiry ? expiry.value : null;
-  clients.forEach(function(u){
-    if (type === 'promo') {
-      var promos = load('ba_promos', []);
-      var exp = expiryVal ? new Date(expiryVal).toISOString() : new Date(Date.now()+7*86400000).toISOString();
-      promos.push({id:genId(),userId:u.id,type:'limited',title:title,desc:body,expiresAt:exp,used:false});
-      save('ba_promos', promos);
+  toast('Envoi en cours...','info', 2000);
+  // Reload fresh users from Firebase
+  db.ref('data/users').once('value').then(function(snap) {
+    var usersObj = snap.val() || {};
+    var usersArr = Object.values(usersObj).filter(function(u){ return u && (!u.role || u.role==='client'); });
+    if (!usersArr.length) { toast('Aucun client inscrit','warning'); return; }
+    // Filter by target
+    var now = new Date();
+    var orders = getOrders();
+    var clients = usersArr;
+    if (target === 'inactive' || target === 'inactive30') {
+      var days = target === 'inactive' ? 14 : 30;
+      clients = usersArr.filter(function(u){
+        var lastO = orders.filter(function(o){ return o.userId===u.id && o.status!=='cancelled'; })
+          .sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); })[0];
+        var ref = lastO ? new Date(lastO.createdAt) : new Date(u.createdAt);
+        return (now - ref) / (1000*60*60*24) >= days;
+      });
+    } else if (target.startsWith('palier-')) {
+      var palierName = target.replace('palier-','');
+      clients = usersArr.filter(function(u){ return getPalier(u.points||0).name===palierName; });
     }
-    notify(u.id, title, body);
-  });
-  toast('Message envoye a '+clients.length+' client(s) !','success', 4000);
-  // Clear form
-  ['msg-title','msg-body'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    if (!clients.length) { toast('Aucun client correspond a ce filtre','warning'); return; }
+    var expiry = document.getElementById('msg-expiry');
+    var expiryVal = expiry ? expiry.value : null;
+    clients.forEach(function(u){
+      if (type === 'promo') {
+        var promos = load('ba_promos', []);
+        var exp = expiryVal ? new Date(expiryVal).toISOString() : new Date(Date.now()+7*86400000).toISOString();
+        promos.push({id:genId(),userId:u.id,type:'limited',title:title,desc:body,expiresAt:exp,used:false});
+        save('ba_promos', promos);
+      }
+      notify(u.id, title, body);
+    });
+    toast('✅ Message envoye a '+clients.length+' client(s) !','success', 5000);
+    ['msg-title','msg-body'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  }).catch(function(e){ toast('Erreur envoi: '+e.message,'error'); });
 }
 
 function toggleAutoRelance(checkbox) {
@@ -3513,17 +3593,43 @@ function showMaintenanceScreen(msg) {
     +'</div>';
 }
 
+// VAPID key from Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
+var VAPID_KEY = 'BN15DCFVx2I9wMXPE2cR4fhNdkOTiKhnuQH_paUV--2wWneNfzAOpWyupFD-9E_TWrQBqlJikq9i54po58V5ICs';
+
 function requestNotifPermission() {
   if (!window.Notification) return;
   if (Notification.permission === 'default') {
     setTimeout(function(){
       Notification.requestPermission().then(function(perm){
         if (perm === 'granted') {
-          toast('Notifications activees ! Vous serez alerte quand votre commande est prete 🔔','success', 4000);
+          toast('Notifications activees ! 🔔','success', 4000);
+          registerFCMToken();
         }
       });
     }, 2000);
+  } else if (Notification.permission === 'granted') {
+    registerFCMToken();
   }
+}
+
+function registerFCMToken() {
+  if (!messaging) return;
+  var user = getCurrentUser();
+  if (!user) return;
+  messaging.getToken({vapidKey: VAPID_KEY}).then(function(token) {
+    if (token) {
+      // Save token to Firebase under user
+      db.ref('data/users/'+user.id+'/fcmToken').set(token);
+      console.log('FCM token registered');
+    }
+  }).catch(function(e){ console.log('FCM token error:', e); });
+
+  // Handle foreground messages
+  messaging.onMessage(function(payload) {
+    var n = payload.notification || {};
+    toast((n.title||'Break Antillais')+' : '+(n.body||''), 'info', 6000);
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  });
 }
 
 function sendPushNotif(title, body) {
@@ -3574,6 +3680,15 @@ function startCountdown() {
       document.getElementById('loading').style.display = 'none';
       showMaintenanceScreen(_initCfg.maintenanceMsg || 'Nous revenons bientot !');
       return;
+    }
+    // Register Service Worker for background notifications
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./firebase-messaging-sw.js')
+        .then(function(reg) {
+          console.log('SW registered:', reg.scope);
+        }).catch(function(e) {
+          console.log('SW registration failed:', e);
+        });
     }
     startFirebaseListeners();
     updateHeaderAuth();
