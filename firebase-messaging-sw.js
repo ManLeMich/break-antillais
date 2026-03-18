@@ -13,15 +13,13 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Handle background notifications
 messaging.onBackgroundMessage(function(payload) {
-  console.log('Background message:', payload);
   const notif = payload.notification || {};
   const title = notif.title || 'Break Antillais 🌴';
   const options = {
     body: notif.body || '',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: 'https://breakantillais.github.io/break-antillais/icon-192.png',
+    badge: 'https://breakantillais.github.io/break-antillais/icon-192.png',
     vibrate: [300, 100, 300],
     data: payload.data
   };
