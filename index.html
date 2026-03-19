@@ -2050,16 +2050,12 @@ function renderProfile(){
     +'<div style="font-size:.78rem;color:rgba(240,236,228,.55);margin-top:.15rem">points</div></div>'
     +'<div style="text-align:right"><div style="font-size:2rem">'+palier.icon+'</div>'
     +'<div style="font-weight:800;font-size:.88rem;color:'+palier.color+'">'+palier.name+'</div></div></div>'
-    +'<div style="margin-top:1rem;display:flex;gap:1.5rem;position:relative">'
-    +'<div><div class="fw-700" style="color:#fff">'+orders.length+'</div><div style="font-size:.7rem;opacity:.55">commandes</div></div>'
-    +'<div><div class="fw-700" style="color:#fff">'+fmt(spent)+'</div><div style="font-size:.7rem;opacity:.55">depense</div></div></div>'
+
     +(nextP?'<div style="margin-top:.85rem;position:relative">'
-      +'<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:.3rem;opacity:.7"><span>Vers '+nextP.icon+' '+nextP.name+'</span><span>'+(nextP.threshold?nextP.threshold+' depenses':nextP.min+' pts requis')+'</span></div>'
-      +'<div style="background:rgba(255,255,255,.1);border-radius:100px;height:5px">'
-      +'<div style="background:'+nextP.color+';width:'+progress+'%;height:100%;border-radius:100px"></div></div></div>':'')
+      +'<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:.3rem;opacity:.7"><span>Vers '+nextP.icon+' '+nextP.name+'</span><span>'+(nextP.min-pts)+' pts restants</span></div>'
+      +'<div style="background:rgba(255,255,255,.1);border-radius:100px;height:10px">'
+      +'<div style="background:'+nextP.color+';width:'+progress+'%;height:100%;border-radius:100px;transition:width .5s ease"></div></div></div>':'')
     +'</div>';
-  // Paliers
-  html+='<div class="sec-title" style="margin-top:1.25rem">Programme Fidelite</div>';
   // ── Programme fidélité unifié ──
   var _palList=load('ba_paliers',PALIERS);
   html += '<div class="sec-title" style="margin-top:1.25rem">Programme Fidelite</div>';
