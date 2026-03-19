@@ -586,12 +586,17 @@ var STATUTS = {
   cancelled: {label:'Annulee',       icon:'❌', color:'#ef4444'}
 };
 var PALIERS = [
-  {name:'Bronze',  min:0,    max:319,   color:'#cd7f32', icon:'🥉', reward:'', rewardShort:'', threshold:'0€'},
-  {name:'Argent',  min:320,  max:639,   color:'#c0c0c0', icon:'🥈', reward:'1 boisson offerte', rewardShort:'🥤 Offerte', threshold:'30€'},
-  {name:'Or',      min:640,  max:959,   color:'#D4AF37', icon:'🥇', reward:'1 crepe sucree offerte', rewardShort:'🍫 Offerte', threshold:'60€'},
-  {name:'Diamant', min:960,  max:1279,  color:'#b9f2ff', icon:'💎', reward:'1 bokit simple offert', rewardShort:'🫓 Offert', threshold:'90€'},
-  {name:'Platine', min:1280, max:1679,  color:'#e5e4e2', icon:'💠', reward:'Menu complet offert', rewardShort:'🎁 Menu', threshold:'120€'},
-  {name:'VIP',     min:1680, max:99999, color:'#ff6b6b', icon:'👑', reward:'1 menu complet offert (bokit + boisson)', rewardShort:'🎁 Menu Offert', threshold:'160€'}
+  {name:'Bronze',  min:0,    max:319,   color:'#cd7f32', icon:'🥉', reward:'', rewardShort:'', threshold:'0€', choices:[]},
+  {name:'Argent',  min:320,  max:639,   color:'#c0c0c0', icon:'🥈', reward:'1 produit offert au choix', rewardShort:'🎁 Offert', threshold:'30€',
+   choices:['Eau plate','Coca-Cola','Colorado Peche Mangue','Colorado Peche Menthe','Royal Soda Kampagne','Royal Soda Grenadine']},
+  {name:'Or',      min:640,  max:959,   color:'#D4AF37', icon:'🥇', reward:'1 produit offert au choix', rewardShort:'🎁 Offert', threshold:'60€',
+   choices:['Crepe Nutella','Crepe Caramel Beurre Sale','Eau plate','Coca-Cola','Colorado Peche Mangue','Colorado Peche Menthe','Royal Soda Kampagne','Royal Soda Grenadine']},
+  {name:'Diamant', min:960,  max:1279,  color:'#b9f2ff', icon:'💎', reward:'1 produit offert au choix', rewardShort:'🎁 Offert', threshold:'90€',
+   choices:['Bokit Jambon Fromage','Bokit Poulet','Bokit Steak','Bokit Thon Crudites','Bokit Saucisse Fromage','Bokit Merguez','Bokit Kebab','Crepe Nutella','Crepe Caramel Beurre Sale']},
+  {name:'Platine', min:1280, max:1679,  color:'#e5e4e2', icon:'💠', reward:'1 produit offert au choix', rewardShort:'🎁 Offert', threshold:'120€',
+   choices:['Bokit Jambon Fromage','Bokit Poulet','Bokit Steak','Bokit Thon Crudites','Bokit Saucisse Fromage','Bokit Merguez','Bokit Kebab','Crepe Nutella','Crepe Caramel Beurre Sale','Crepe Jambon Fromage']},
+  {name:'VIP',     min:1680, max:99999, color:'#ff6b6b', icon:'👑', reward:'1 produit offert au choix', rewardShort:'🎁 Offert', threshold:'160€',
+   choices:['Bokit Jambon Fromage','Bokit Poulet','Bokit Steak','Bokit Thon Crudites','Bokit Saucisse Fromage','Bokit Merguez','Bokit Kebab','Crepe Nutella','Crepe Caramel Beurre Sale','Crepe Jambon Fromage','Coca-Cola','Eau plate']}
 ];
 
 var DEFAULT_PRODUCTS = [
@@ -841,7 +846,7 @@ function showLogin() {
     +'<button style="background:none;color:var(--red);border:none;cursor:pointer;font-weight:700" onclick="showRegister()">S&apos;inscrire</button></p>'
     +'</div></div>';
 }
-function showRegister() {
+function showRegister(prefillRef) {
   var m = document.getElementById('m-auth');
   m.style.display = 'block';
   m.innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-auth&apos;)">'
@@ -854,6 +859,7 @@ function showRegister() {
     +'<div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" id="rg-pw" type="password" placeholder="Min. 6 caracteres"/><span class="form-error" id="rg-pw-e"></span></div>'
     +'<div class="form-group"><label class="form-label">Confirmer</label><input class="form-input" id="rg-pw2" type="password"/><span class="form-error" id="rg-pw2-e"></span></div>'
     +'<div class="form-group"><label class="form-label">Code de parrainage (optionnel)</label><input class="form-input" id="rg-ref" placeholder="Ex: MIC4F2A"/></div>'
+    +(prefillRef ? '<scr'+'ipt>document.getElementById(\'rg-ref\').value=\''+prefillRef+'\';document.getElementById(\'rg-ref\').style.borderColor=\'var(--gold)\';</scr'+'ipt>' : '')
     +'<div class="form-group"><label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer"><input type="checkbox" id="rg-cgv" style="margin-top:.2rem;accent-color:var(--red)"/>'
     +'<span class="text-sm text-muted">J&apos;accepte les CGV et la politique RGPD</span></label>'
     +'<span class="form-error" id="rg-cgv-e"></span></div>'
@@ -2066,7 +2072,7 @@ function renderProfile(){
         +'<div class="fw-700" style="color:#2d9e5f">'+p.reward+'</div>'
         +'<div class="text-sm text-muted">Palier '+p.name+' atteint ✓</div>'
         +'</div>'
-        +'<button class="btn btn-primary btn-sm" data-palier="'+p.name+'" onclick="addRewardToCartByPalier(this.dataset.palier)" style="white-space:nowrap">+ Panier</button>'
+        +'<button class="btn btn-primary btn-sm" data-palier="'+p.name+'" onclick="addRewardToCartByPalier(this.dataset.palier)" style="white-space:nowrap">🎁 Choisir</button>'
         +'</div>';
     });
   }
@@ -2080,7 +2086,7 @@ function renderProfile(){
       +'<span style="font-size:1.5rem">'+p.icon+'</span>'
       +'<div style="flex:1"><div class="fw-700" style="color:'+p.color+'">'+p.name+'</div>'
       +(p.reward?'<div class="text-sm" style="color:#2d9e5f">🎁 '+p.reward+'</div>':'')
-      +'<div class="text-sm text-muted">'+(p.threshold?'Debloque a '+p.threshold+' depenses':p.min+' pts')+'</div></div>'
+      +'<div class="text-sm text-muted">Debloque a '+p.min+' pts</div></div>'
       +(done?'<span style="color:#2d9e5f;font-weight:700;font-size:.82rem">✓ Atteint</span>'
              :'<span class="text-muted text-sm">'+Math.max(0,p.min-pts)+' pts</span>')
       +'</div>';
@@ -2601,7 +2607,7 @@ function adminLoyalty(){
       +'<input class="form-input" id="pal-min-'+i+'" type="number" value="'+p.min+'" placeholder="Min pts" style="flex:1"/>'
       +'<input class="form-input" id="pal-max-'+i+'" type="number" value="'+p.max+'" placeholder="Max pts" style="flex:1"/>'
       +'</div>'
-      +'<input class="form-input" id="pal-reward-'+i+'" value="'+(p.reward||'')+'" placeholder="Recompense (ex: 1 boisson offerte)" style="margin-top:.35rem"/>'
+      +'<input class="form-input" id="pal-reward-'+i+'" value="'+(p.reward||'')+'" placeholder="Description (ex: 1 produit offert au choix)" style="margin-top:.35rem"/>'      +'<input class="form-input" id="pal-choices-'+i+'" value="'+(p.choices||[]).join(', ')+'" placeholder="Produits au choix separes par virgule" style="margin-top:.35rem;font-size:.8rem"/>'
       +'<div style="display:flex;gap:.5rem;margin-top:.35rem">'
       +'<input class="form-input" id="pal-icon-'+i+'" value="'+p.icon+'" placeholder="Emoji" style="flex:1;max-width:80px"/>'
       +'<input class="form-input" id="pal-color-'+i+'" type="color" value="'+p.color+'" style="flex:1;max-width:60px;padding:.3rem;height:38px;cursor:pointer"/>'
@@ -2647,13 +2653,17 @@ function savePaliers(){
     var color=document.getElementById('pal-color-'+i);
     if(!name) continue;
     var reward=document.getElementById('pal-reward-'+i);
+    var choicesEl=document.getElementById('pal-choices-'+i);
+    var choicesArr = choicesEl ? choicesEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean) : (paliers[i].choices||[]);
     updated.push({
       name:name.value.trim()||paliers[i].name,
       min:parseInt(min.value)||paliers[i].min,
       max:parseInt(max.value)||paliers[i].max,
       icon:icon.value.trim()||paliers[i].icon,
       color:color.value||paliers[i].color,
-      reward:reward?reward.value.trim():''
+      reward:reward?reward.value.trim():'',
+      choices:choicesArr,
+      threshold:paliers[i].threshold||''
     });
   }
   updated.sort(function(a,b){return a.min-b.min;});
@@ -3592,19 +3602,66 @@ function addRewardToCartByPalier(palierName) {
   var user = getCurrentUser();
   if (!user) { toast('Connectez-vous pour utiliser vos recompenses','warning'); return; }
 
-  // Check if reward already in cart
   var alreadyIn = cart.find(function(i){ return i.isReward && i.rewardPalier===palierName; });
   if (alreadyIn) { toast('Cette recompense est deja dans votre panier','warning'); return; }
 
-  // Find reward for this palier
   var paliers = load('ba_paliers', PALIERS);
   var pal = paliers.find(function(p){ return p.name===palierName; });
   if (!pal || !pal.reward) { toast('Recompense introuvable','error'); return; }
 
+  var choices = pal.choices || [];
+  if (!choices.length) {
+    // No choices configured - add generic reward
+    cart.push({id:genId(), pid:'reward-'+palierName, name:pal.reward, price:0, cat:'reward',
+      details:'Recompense palier '+palierName, qty:1, isReward:true, rewardPalier:palierName});
+    updateBadges();
+    toast('🎁 '+pal.reward+' ajoute au panier !','success', 4000);
+    go('cart');
+    return;
+  }
+
+  // Show product picker modal
+  var m = document.getElementById('m-product');
+  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
+    +'<div class="modal"><div class="modal-handle"></div>'
+    +'<div style="text-align:center;margin-bottom:1rem">'
+    +'<div style="font-size:2.5rem">'+pal.icon+'</div>'
+    +'<h2 class="modal-title" style="margin:.5rem 0">Choisissez votre produit offert</h2>'
+    +'<div style="font-size:.85rem;color:var(--muted)">Palier '+pal.name+' — 1 produit gratuit</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-direction:column;gap:.45rem">';
+
+  // Try to match choices with actual products to show price/image
+  var products = getProducts();
+  choices.forEach(function(choiceName){
+    var prod = products.find(function(p){ return p.name === choiceName && p.ok; });
+    var emoji = prod ? (EMOJI[prod.cat]||'🍽') : '🎁';
+    var desc = prod ? prod.desc : '';
+    html += '<div style="display:flex;align-items:center;gap:.85rem;padding:.75rem .9rem;background:var(--dark3);border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer" '
+      +'data-choice="'+choiceName+'" data-palier="'+palierName+'" onclick="confirmRewardChoice(this.dataset.choice, this.dataset.palier)">'
+      +'<span style="font-size:1.8rem">'+emoji+'</span>'
+      +'<div style="flex:1">'
+      +'<div class="fw-700 text-sm">'+choiceName+'</div>'
+      +(desc?'<div style="font-size:.72rem;color:var(--muted)">'+desc+'</div>':'')
+      +'</div>'
+      +'<span style="color:#2d9e5f;font-weight:800;font-size:.9rem">Offert</span>'
+      +'</div>';
+  });
+
+  html += '</div>'
+    +'<button class="btn btn-secondary btn-full mt-2" onclick="closeModal(&apos;m-product&apos;)">Annuler</button>'
+    +'</div></div>';
+
+  m.innerHTML = html;
+  m.style.display = 'block';
+}
+
+function confirmRewardChoice(productName, palierName) {
+  closeModal('m-product');
   cart.push({
     id: genId(),
     pid: 'reward-'+palierName,
-    name: pal.reward,
+    name: productName,
     price: 0,
     cat: 'reward',
     details: 'Recompense palier '+palierName,
@@ -3613,7 +3670,7 @@ function addRewardToCartByPalier(palierName) {
     rewardPalier: palierName
   });
   updateBadges();
-  toast('🎁 '+pal.reward+' ajoute au panier !','success', 4000);
+  toast('🎁 '+productName+' ajoute au panier !','success', 4000);
   go('cart');
 }
 
@@ -3647,23 +3704,23 @@ function copyReferral(code) {
 
 function shareReferral(code) {
   var cfg = getCfg();
-  var user = getCurrentUser();
-  var signupPts = cfg.signupPts || 50;
-  var filleulPts = cfg.referralPtsFilleul || 50;
-  var parrainPts = cfg.referralPtsParrain || 100;
+  var signupPts = cfg.signupPts || 20;
+  var filleulPts = cfg.referralPtsFilleul || 10;
+  var refUrl = 'https://break-antillais.github.io/break-antillais?ref=' + code;
   var msg = '🌴 Commandez vos bokits et specialites antillaises sur Break Antillais !'
-    + '\n\nUtilisez mon code de parrainage : *' + code + '*'
     + '\n\n✅ ' + signupPts + ' points offerts a l\'inscription'
-    + '\n🎁 +' + filleulPts + ' points bonus avec mon code'
-    + '\n\n👉 https://break-antillais.github.io/break-antillais';
+    + '\n🎁 +' + filleulPts + ' points bonus avec mon code de parrainage'
+    + '\n\n👉 ' + refUrl;
   if (navigator.share) {
     navigator.share({
       title: 'Break Antillais 🌴',
       text: msg,
-      url: 'https://break-antillais.github.io/break-antillais'
-    }).catch(function(e){ copyReferral(code); });
+      url: refUrl
+    }).catch(function(e){
+      var waUrl = 'https://wa.me/?text=' + encodeURIComponent(msg);
+      window.open(waUrl, '_blank');
+    });
   } else {
-    // Fallback: WhatsApp link
     var waUrl = 'https://wa.me/?text=' + encodeURIComponent(msg);
     window.open(waUrl, '_blank');
   }
@@ -3818,6 +3875,16 @@ function startCountdown() {
     updateHeaderAuth();
     updateBadges();
     renderHome();
+    // Check for referral code in URL
+    var _urlParams = new URLSearchParams(window.location.search);
+    var _refCode = _urlParams.get('ref');
+    if (_refCode && !getCurrentUser()) {
+      // Auto-open register with code pre-filled
+      setTimeout(function(){
+        showRegister(_refCode);
+        toast('Code de parrainage detecte ! Inscrivez-vous pour profiter du bonus 🎁', 'success', 5000);
+      }, 2000);
+    }
     setTimeout(function(){
       var ls = document.getElementById('loading');
       if (ls) ls.style.display='none';
