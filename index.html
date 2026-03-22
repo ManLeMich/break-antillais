@@ -373,14 +373,23 @@ try { messaging = firebase.messaging(); } catch(e) { console.log('FCM not availa
 var ONESIGNAL_APP_ID = '924617f0-5d1b-47ea-8951-1f2e86ec8eb1';
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(function(OneSignal) {
-  OneSignal.init({ appId: ONESIGNAL_APP_ID, allowLocalhostAsSecureOrigin: true });
+  OneSignal.init({
+    appId: ONESIGNAL_APP_ID,
+    allowLocalhostAsSecureOrigin: true,
+    serviceWorkerPath: 'OneSignalSDK.sw.js',
+    serviceWorkerParam: { scope: '/' },
+    notifyButton: { enable: false }
+  });
 });
 
 function osSubscribe(userId) {
-  // Tag user with their ID so we can target them
-  if (!window.OneSignal) return;
+  if (!window.OneSignalDeferred) return;
   OneSignalDeferred.push(function(OneSignal) {
-    OneSignal.login(userId).catch(function(){});
+    // Demande permission si pas encore accordée
+    OneSignal.Notifications.requestPermission();
+    // Lie l'external_id (pour ciblage par external_id)
+    OneSignal.login(userId).catch(function(e){ console.warn('OS login:', e); });
+    // Ajoute aussi le tag (double sécurité)
     OneSignal.User.addTag('userId', userId);
   });
 }
@@ -398,9 +407,11 @@ function osSendPush(userId, title, body, delayMs) {
     });
     return;
   }
+  // Ciblage par external_id (lié via OneSignal.login(userId) lors de la connexion)
   var payload = {
     app_id: ONESIGNAL_APP_ID,
-    filters: [{field:'tag', key:'userId', relation:'=', value:userId}],
+    target_channel: 'push',
+    include_aliases: { external_id: [String(userId)] },
     headings: {en: title, fr: title},
     contents: {en: body, fr: body},
     url: 'https://break-antillais.github.io/break-antillais',
@@ -4446,14 +4457,16 @@ function startCountdown() {
       showMaintenanceScreen(_initCfg.maintenanceMsg || 'Nous revenons bientot !');
       return;
     }
-    // Register Service Worker for background notifications
+    // Register Service Workers for background notifications
     if ('serviceWorker' in navigator) {
+      // Firebase Messaging SW
       navigator.serviceWorker.register('./firebase-messaging-sw.js')
-        .then(function(reg) {
-          console.log('SW registered:', reg.scope);
-        }).catch(function(e) {
-          console.log('SW registration failed:', e);
-        });
+        .then(function(reg) { console.log('FCM SW registered:', reg.scope); })
+        .catch(function(e) { console.log('FCM SW failed:', e); });
+      // OneSignal SW (obligatoire pour notifs app fermée)
+      navigator.serviceWorker.register('./OneSignalSDK.sw.js', { scope: '/' })
+        .then(function(reg) { console.log('OneSignal SW registered:', reg.scope); })
+        .catch(function(e) { console.log('OneSignal SW failed:', e); });
     }
     startFirebaseListeners();
     // Attach notification listener if user already logged in
