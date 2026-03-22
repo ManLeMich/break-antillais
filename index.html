@@ -1114,45 +1114,30 @@ function pcardHTML(p) {
 function buildBoxConfigurator(p) {
   var maxSav = p.maxSaveurs || 2;
   var totalQty = p.qty || 10;
-  var isBox10 = p.boxType === 'box10';
+  var qtyPerSaveur = 5; // Always 5 mini bokits per flavor
+  var maxSaveurs = Math.floor(totalQty / qtyPerSaveur); // box10=2, box20=4, box30=6
   _boxQtys = {};
   var html = '<div class="form-group">';
   html += '<label class="form-label">🍖 Choisissez vos saveurs</label>';
-  if (isBox10) {
-    html += '<p style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem">Choisissez <strong>2 saveurs</strong> — 5 mini bokits de chaque</p>';
-    html += '<div id="box-saveurs">';
-    MINI_SAVEURS.forEach(function(s, i){
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem .9rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:.35rem;border:1.5px solid var(--border);cursor:pointer" id="box-row-'+i+'" data-idx="'+i+'" onclick="toggleBoxSaveur10(this.dataset.idx)">'
-        +'<span class="fw-700 text-sm">'+s+'</span>'
-        +'<div style="display:flex;align-items:center;gap:.6rem">'
-        +'<span class="text-sm text-muted" id="box-qty-'+i+'">—</span>'
-        +'<div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:all .2s" id="box-check-'+i+'"></div>'
-        +'</div></div>';
-    });
-    html += '</div>';
-    html += '<div style="display:flex;justify-content:space-between;padding:.5rem .9rem;background:rgba(212,175,55,.08);border-radius:var(--radius-sm);margin-top:.35rem">'
-      +'<span class="text-sm text-muted">Saveurs selectionnees</span>'
-      +'<span class="fw-700 text-gold" id="box-total">0 / 2</span></div>';
-  } else {
-    html += '<p style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem">Max <strong>'+maxSav+' saveurs</strong> — repartissez vos <strong>'+totalQty+' mini bokits</strong></p>';
-    html += '<div id="box-saveurs">';
-    MINI_SAVEURS.forEach(function(s, i){
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem .9rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:.35rem;border:1.5px solid var(--border)" id="box-row-'+i+'">'
-        +'<span class="fw-700 text-sm">'+s+'</span>'
-        +'<div style="display:flex;align-items:center;gap:.5rem">'
-        +'<button style="width:30px;height:30px;border-radius:50%;background:var(--dark4);border:1px solid var(--border);color:var(--text);font-size:1.2rem;cursor:pointer" data-idx="'+i+'" onclick="adjustBoxQty(this.dataset.idx,-1,'+maxSav+','+totalQty+')">−</button>'
-        +'<span class="fw-700 text-sm" id="box-qty-'+i+'" style="min-width:28px;text-align:center">0</span>'
-        +'<button style="width:30px;height:30px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:1.2rem;cursor:pointer" data-idx="'+i+'" onclick="adjustBoxQty(this.dataset.idx,1,'+maxSav+','+totalQty+')">+</button>'
-        +'</div></div>';
-    });
-    html += '</div>';
-    html += '<div style="display:flex;justify-content:space-between;padding:.6rem .9rem;background:rgba(212,175,55,.08);border-radius:var(--radius-sm);margin-top:.35rem;border:1px solid rgba(212,175,55,.2)">'
-      +'<span class="text-sm text-muted">Total</span>'
-      +'<span class="fw-700 text-gold" id="box-total">0 / '+totalQty+'</span></div>';
-  }
+  html += '<p style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem">Chaque saveur = <strong>'+qtyPerSaveur+' mini bokits</strong> — max <strong>'+maxSaveurs+' saveurs</strong> (la meme saveur peut etre choisie plusieurs fois)</p>';
+  html += '<div id="box-saveurs">';
+  MINI_SAVEURS.forEach(function(s, i){
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem .9rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:.35rem;border:1.5px solid var(--border)" id="box-row-'+i+'">'
+      +'<span class="fw-700 text-sm">'+s+'</span>'
+      +'<div style="display:flex;align-items:center;gap:.5rem">'
+      +'<button style="width:30px;height:30px;border-radius:50%;background:var(--dark4);border:1px solid var(--border);color:var(--text);font-size:1.2rem;cursor:pointer" data-idx="'+i+'" onclick="adjustBoxSaveur(this.dataset.idx,-1,'+maxSaveurs+','+totalQty+','+qtyPerSaveur+')">−</button>'
+      +'<span class="fw-700 text-sm" id="box-qty-'+i+'" style="min-width:28px;text-align:center">0</span>'
+      +'<button style="width:30px;height:30px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:1.2rem;cursor:pointer" data-idx="'+i+'" onclick="adjustBoxSaveur(this.dataset.idx,1,'+maxSaveurs+','+totalQty+','+qtyPerSaveur+')">+</button>'
+      +'</div></div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:space-between;padding:.6rem .9rem;background:rgba(212,175,55,.08);border-radius:var(--radius-sm);margin-top:.35rem;border:1px solid rgba(212,175,55,.2)">'
+    +'<span class="text-sm text-muted">Saveurs choisies</span>'
+    +'<span class="fw-700 text-gold" id="box-total">0 / '+maxSaveurs+'</span></div>';
   html += '</div>';
   return html;
 }
+
 
 function toggleBoxSaveur10(idx) {
   idx = parseInt(idx);
@@ -1174,6 +1159,27 @@ function toggleBoxSaveur10(idx) {
   }
   var active = Object.keys(_boxQtys).filter(function(k){ return (_boxQtys[k]||0)>0; }).length;
   document.getElementById('box-total').textContent = active+' / 2';
+}
+
+function adjustBoxSaveur(idx, delta, maxSaveurs, totalQty, qtyPerSaveur) {
+  idx = parseInt(idx);
+  if (!_boxQtys[idx]) _boxQtys[idx] = 0;
+  var currentTotal = Object.values(_boxQtys).reduce(function(s,v){return s+v;},0);
+  if (delta > 0 && currentTotal >= maxSaveurs) {
+    toast('Maximum '+maxSaveurs+' saveurs pour cette box','warning'); return;
+  }
+  if (delta < 0 && _boxQtys[idx] <= 0) return;
+  _boxQtys[idx] = (_boxQtys[idx]||0) + delta;
+  if (_boxQtys[idx] < 0) _boxQtys[idx] = 0;
+  // Update display
+  var el = document.getElementById('box-qty-'+idx);
+  if (el) el.textContent = _boxQtys[idx] > 0 ? _boxQtys[idx]+'x ('+(_boxQtys[idx]*qtyPerSaveur)+' pcs)' : '0';
+  var row = document.getElementById('box-row-'+idx);
+  if (row) row.style.borderColor = _boxQtys[idx]>0 ? 'var(--red)' : 'var(--border)';
+  // Update total
+  var newTotal = Object.values(_boxQtys).reduce(function(s,v){return s+v;},0);
+  var totalEl = document.getElementById('box-total');
+  if (totalEl) totalEl.textContent = newTotal+' / '+maxSaveurs;
 }
 
 function adjustBoxQty(idx, delta, maxSav, totalQty) {
