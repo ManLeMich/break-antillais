@@ -385,20 +385,40 @@ function osSubscribe(userId) {
   });
 }
 
+// OneSignal REST API key - needed to send push from browser
+// Get it from OneSignal Dashboard > Settings > Keys & IDs > REST API Key
+var OS_REST_KEY = 'os_v2_app_sjdbp4c5dnd6vckrd4xin3eowfvscoorm5cu3tvek5nbtqgcaixhwzcsb4k7lmhocbybzbzdawmfzlqgxhug4r5odi66d5q5h4exzbi';
+
 function osSendPush(userId, title, body, delayMs) {
-  // Send via OneSignal REST API with optional delay
-  var sendAt = delayMs ? new Date(Date.now() + delayMs).toISOString() : null;
+  if (!OS_REST_KEY) {
+    console.log('OneSignal REST key not set - storing in queue');
+    db.ref('os_queue/'+Date.now()).set({
+      userId:userId, title:title, body:body,
+      delayMs:delayMs||0, at:new Date().toISOString(), sent:false
+    });
+    return;
+  }
   var payload = {
     app_id: ONESIGNAL_APP_ID,
     filters: [{field:'tag', key:'userId', relation:'=', value:userId}],
     headings: {en: title, fr: title},
     contents: {en: body, fr: body},
-    url: 'https://break-antillais.github.io/break-antillais'
+    url: 'https://break-antillais.github.io/break-antillais',
+    web_url: 'https://break-antillais.github.io/break-antillais'
   };
-  if (sendAt) payload.send_after = sendAt;
-  // Write to Firebase queue - a listener will forward to OneSignal REST API
-  // Since we can't call OneSignal REST directly from browser (CORS), we store in Firebase
-  db.ref('os_queue/'+Date.now()).set({userId:userId, title:title, body:body, delayMs:delayMs||0, at:new Date().toISOString(), sent:false});
+  if (delayMs) {
+    payload.send_after = new Date(Date.now() + delayMs).toISOString();
+  }
+  fetch('https://onesignal.com/api/v1/notifications', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Basic '+OS_REST_KEY
+    },
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ console.log('OneSignal sent:', d); })
+    .catch(function(e){ console.warn('OneSignal error:', e); });
 }
 
 // EmailJS init
@@ -767,6 +787,31 @@ function deleteProduct(id) {
 }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
 function fmt(p) { return (typeof p==='number' ? p.toFixed(2) : p).replace('.',',') + '€'; }
+function notifyOrder(userId, title, body, status, orderId, orderNumber, pickupTime) {
+  // ONE notification via status_updates (in-app) + OneSignal (background)
+  var notifId = genId();
+  // Firebase real-time (in-app)
+  db.ref('status_updates/'+userId+'/'+notifId).set({
+    orderId: orderId,
+    orderNumber: orderNumber,
+    status: status,
+    title: title,
+    body: body,
+    at: new Date().toISOString()
+  });
+  // OneSignal (background/push)
+  osSendPush(userId, title, body, 0);
+  // Save to user notifs history
+  var users = getUsers();
+  var u = users.find(function(x){ return x.id === userId; });
+  if (u) {
+    if (!u.notifs) u.notifs = [];
+    u.notifs.unshift({id:notifId, title:title, body:body, read:false, at:new Date().toISOString()});
+    if (u.notifs.length > 50) u.notifs = u.notifs.slice(0,50);
+    saveUser(u);
+  }
+}
+
 function notify(userId, title, body) {
   var users = getUsers();
   var u = users.find(function(x){ return x.id === userId; });
@@ -776,8 +821,6 @@ function notify(userId, title, body) {
   u.notifs.unshift(notif);
   if (u.notifs.length > 50) u.notifs = u.notifs.slice(0,50);
   saveUser(u);
-  // OneSignal push for background delivery
-  osSendPush(userId, title, body, 0);
   // Write to status_updates so client listener picks it up immediately
   db.ref('status_updates/'+userId+'/'+notif.id).set({
     orderId: '',
@@ -2464,18 +2507,8 @@ function advanceOrder(id){
     ready:'Votre commande n°'+o.orderNumber+' est prete ! Venez la recuperer.',
     picked_up:'Commande n°'+o.orderNumber+' recuperee. Merci ! 🌴'
   };
-  notify(o.userId, titles[nxt], bodies[nxt]);
-  // Write to status_updates for real-time client notification
-  db.ref('status_updates/'+o.userId+'/'+genId()).set({
-    orderId: o.id,
-    orderNumber: o.orderNumber,
-    status: nxt,
-    title: titles[nxt],
-    body: bodies[nxt],
-    at: new Date().toISOString()
-  });
-  // OneSignal push for background notification
-  osSendPush(o.userId, titles[nxt], bodies[nxt], 0);
+  // Single notification channel - notify() handles Firebase + OneSignal
+  notifyOrder(o.userId, titles[nxt], bodies[nxt], nxt, o.id, o.orderNumber, o.pickupTime);
   toast('Statut mis a jour','success');
   document.getElementById('admin-content').innerHTML=adminOrders();
   // Prompt rating when order is picked up - 25 min delay
@@ -3124,6 +3157,7 @@ function sendAdminMessage() {
         save('ba_promos', promos);
       }
       notify(u.id, title, body);
+      osSendPush(u.id, title, body, 0);
     });
     toast('✅ Message envoye a '+clients.length+' client(s) !','success', 5000);
     ['msg-title','msg-body'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
