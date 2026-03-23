@@ -350,6 +350,7 @@ html, body { background: var(--dark) !important; color: var(--text); font-family
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 <script>
 
 'use strict';
@@ -366,6 +367,7 @@ var firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
+var storage = firebase.storage();
 var messaging = null;
 try { messaging = firebase.messaging(); } catch(e) { console.log('FCM not available:', e); }
 
@@ -487,7 +489,7 @@ function loadFromFirebase(cb) {
 
 function startFirebaseListeners() {
   var user = getCurrentUser();
-  var isAdmin = user && (user.role==='superadmin'||user.role==='admin'||user.role==='entreprise');
+  var isAdmin = user && (user.role==='superadmin'||user.role==='admin'||user.role==='entreprise'||user.role==='preparateur');
   console.log('[Firebase] Starting listeners, user:', user ? user.prenom : 'none', 'isAdmin:', isAdmin);
 
   // Real-time orders sync - with status change detection
@@ -951,7 +953,7 @@ function showRegister(prefillRef) {
     +'<div class="form-group"><label class="form-label">Code de parrainage (optionnel)</label><input class="form-input" id="rg-ref" placeholder="Ex: MIC4F2A"/></div>'
     +(prefillRef ? '<scr'+'ipt>document.getElementById(\'rg-ref\').value=\''+prefillRef+'\';document.getElementById(\'rg-ref\').style.borderColor=\'var(--gold)\';</scr'+'ipt>' : '')
     +'<div class="form-group"><label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer"><input type="checkbox" id="rg-cgv" style="margin-top:.2rem;accent-color:var(--red)"/>'
-    +'<span class="text-sm text-muted">J&apos;accepte les CGV et la politique RGPD</span></label>'
+    +'<span class="text-sm text-muted">J\'accepte les <button type="button" onclick="showCGV()" style="background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline">CGV</button> et la <button type="button" onclick="showRGPD()" style="background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline">politique RGPD</button></span></label>'
     +'<span class="form-error" id="rg-cgv-e"></span></div>'
     +'<button class="btn btn-primary btn-full" onclick="doRegister()">Creer mon compte</button>'
     +'<div class="divider"></div>'
@@ -1046,7 +1048,20 @@ function doRegister() {
   closeModal('m-auth');
   updateHeaderAuth(); updateBadges(); renderHome();
   requestNotifPermission();
-  toast('Bienvenue '+prenom+' ! '+newUser.points+' points offerts 🎁','success',5000);
+  var mAuth = document.getElementById('m-auth');
+  if (mAuth) {
+    mAuth.style.display = 'block';
+    mAuth.innerHTML = '<div class="modal-overlay"><div class="modal" style="text-align:center">'
+      + '<div style="font-size:3.5rem;margin-bottom:.5rem">\u{1F334}</div>'
+      + '<h2 class="modal-title">Bienvenue ' + prenom + ' !</h2>'
+      + '<p style="color:var(--muted);margin-bottom:1rem">Vous faites partie de la famille <strong style="color:var(--red)">Break Antillais</strong> !</p>'
+      + '<div style="background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.3);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem">'
+      + '<div style="font-size:1.5rem;font-weight:800;color:var(--gold)">+' + newUser.points + ' points offerts \u{1F381}</div>'
+      + '<div style="font-size:.8rem;color:var(--muted)">Cadeau de bienvenue</div></div>'
+      + '<p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">Accumulez des points a chaque commande et debloquez des recompenses !</p>'
+      + '<button class="btn btn-primary btn-full" onclick="closeModal(\u0027m-auth\u0027)">C\u0027est parti ! \u{1F680}</button>'
+      + '</div></div>';
+  }
 }
 function doLogout() {
   setCurrentUser(null); cart=[];
@@ -1181,7 +1196,8 @@ function pcardHTML(p) {
   if (clickable) { div.dataset.pid = p.id; div.setAttribute('onclick','openProduct(this.dataset.pid)'); }
   var imgHtml = p.image
     ? '<div class="pcard-img"><img src="'+p.image+'" alt="'+p.name+'"/></div>'
-    : '<div class="pcard-img">'+(EMOJI[p.cat]||'🍽')+'</div>';
+    : '<div class="pcard-img">'+(EMOJI[p.cat]||'\u{1F37D}')+'</div>';
+  var allergenBadge = (p.allergens && p.allergens.length) ? '<div style="font-size:.7rem;color:#f59e0b;margin-top:.2rem">⚠ '+p.allergens.join(', ')+'</div>' : '';
   var user = getCurrentUser();
   var favs = user ? load('ba_favs_'+user.id, []) : [];
   var isFav = favs.indexOf(p.id) >= 0;
@@ -1191,6 +1207,7 @@ function pcardHTML(p) {
     + '<div class="pcard-body">'
     + '<div class="pcard-name">'+p.name+'</div>'
     + '<div class="pcard-desc">'+(p.desc||'')+'</div>'
+    + allergenBadge
     + (p.isClassique ? '<div class="pcard-price" style="font-size:.8rem;color:var(--muted)">Prix selon selection</div>' : '<div class="pcard-price">'+fmt(p.price)+'</div>')
     + '</div>';
   return div.outerHTML;
@@ -1387,7 +1404,7 @@ function continueOpenProduct(id) {
         var unavail = !m.ok;
         html += '<button class="chip" data-v="'+m.name+'"'
           +(unavail?' disabled style="opacity:.4;cursor:not-allowed;pointer-events:none"':' onclick="toggleMeat(this,'+mc+')"')+'>'
-          +m.name+(unavail?' <span style="color:#ef4444;font-size:.65rem">(indispo)</span>':'')+'</button>';
+          +(m.halal?'[Halal] ':'')+m.name+(unavail?' <span style="color:#ef4444;font-size:.65rem">(indispo)</span>':'')+'</button>';
       });
       html += '</div></div>';
     }
@@ -1968,7 +1985,11 @@ function orderCard(o){
     +'<span class="font-head fw-800">N°'+o.orderNumber+'</span>'
     +'<span class="status-badge" style="background:'+st.color+'22;color:'+st.color+'">'+st.icon+' '+st.label+'</span></div>'
     +'<div class="text-sm text-muted mb-1">'+new Date(o.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})+'</div>'
-    +'<div class="text-sm mb-1">'+o.items.map(function(i){return i.name;}).join(', ')+'</div>'
+    +'<div style="margin:.4rem 0">'+o.items.map(function(it,idx){
+      var s = o.itemsStatus && o.itemsStatus[idx];
+      var dot = s==='done'?'<span style="color:#10b981">✓</span>':o.status==='picked_up'?'<span style="color:#6b7280">✓</span>':o.status==='preparing'&&idx===0&&!s?'<span style="color:#3b82f6">~</span>':'<span style="color:#6b7280">○</span>';
+      return '<div style="font-size:.82rem;padding:.15rem 0">'+dot+' '+it.name+'</div>';
+    }).join('')+'</div>'
     +'<div class="text-sm fw-700 text-gold">'+fmt(o.total)+' · '+o.payment+'</div>'
     +'<div class="text-sm mt-1">⏰ Retrait a '+o.pickupTime+'</div>';
   if(cur>=0){
@@ -2154,7 +2175,7 @@ function renderProfile(){
     sc.innerHTML=header('Profil')+'<div class="empty-state"><div class="icon">👤</div><div class="title">Mon Compte</div><p class="text-sm mb-3">Connectez-vous pour acceder a votre fidelite</p><button class="btn btn-primary btn-full mb-2" onclick="showLogin()">Se connecter</button><button class="btn btn-secondary btn-full" onclick="showRegister()">Creer un compte</button></div>';
     return;
   }
-  if(user.role==='superadmin'||user.role==='admin'||user.role==='entreprise'){
+  if(user.role==='superadmin'||user.role==='admin'||user.role==='entreprise'||user.role==='preparateur'){
     sc.innerHTML=renderAdmin(user.role); return;
   }
   var pts=user.points||0;
@@ -2224,6 +2245,13 @@ function renderProfile(){
   },300);
 
   html += getReferralSection(user);
+  html += '<div class="sec-title" style="margin-top:1.25rem">Code marche</div>';
+  html += '<div class="card mb-2">'
+    + '<p class="text-sm text-muted mb-2">Achete sur notre stand ? Entrez votre code pour gagner des points !</p>'
+    + '<div style="display:flex;gap:.5rem">'
+    + '<input class="form-input" id="market-code-input" placeholder="Ex: BA-XXXX-XXXX" style="flex:1;text-transform:uppercase;letter-spacing:.05em"/>'
+    + '<button class="btn btn-primary btn-sm" onclick="redeemMarketCodeFromInput()">Valider</button>'
+    + '</div></div>';
   html+='<div class="divider"></div>';
   html+='<button class="btn btn-danger btn-full mt-1" onclick="doLogout()">Se deconnecter</button>';
   html+='</div>';
@@ -2235,13 +2263,16 @@ function renderProfile(){
 // ══════════════════════════════════════════════════════
 function renderAdmin(role){
   var isSup=role==='superadmin'||role==='admin';
+  var isPrep=role==='preparateur';
   var tabs='<button class="admin-tab active" onclick="adminTab(&apos;orders&apos;,this)">📦 Commandes</button>';
-  if(isSup) tabs+='<button class="admin-tab" onclick="adminTab(&apos;products&apos;,this)">🍽 Produits</button>'
+  if(isPrep) tabs+='<button class="admin-tab" onclick="adminTab(&apos;marketcodes&apos;,this)">🏪 Marche</button>';
+  if(isSup && !isPrep) tabs+='<button class="admin-tab" onclick="adminTab(&apos;products&apos;,this)">🍽 Produits</button>'
     +'<button class="admin-tab" onclick="adminTab(&apos;stats&apos;,this)">📊 Stats</button>'
     +'<button class="admin-tab" onclick="adminTab(&apos;loyalty&apos;,this)">🎁 Fidelite</button>'
     +'<button class="admin-tab" onclick="adminTab(&apos;config&apos;,this)">⚙️ Config</button>'
-    +'<button class="admin-tab" onclick="adminTab(&apos;invoices&apos;,this)">🧾 Factures</button>';
-  var roleLabel=isSup?'👑 Super Admin':'🏪 Entreprise';
+    +'<button class="admin-tab" onclick="adminTab(&apos;invoices&apos;,this)">🧾 Factures</button>'
+    +'<button class="admin-tab" onclick="adminTab(&apos;marketcodes&apos;,this)">🏪 Marche</button>';
+  var roleLabel=isPrep?'Preparateur':isSup?'Super Admin':'Entreprise';
   return '<div class="header">'
     +'<div class="logo"><span class="logo-break">Break</span><span class="logo-antillais">Antillais</span></div>'
     +'<div style="display:flex;align-items:center;gap:.5rem">'
@@ -2254,9 +2285,41 @@ function renderAdmin(role){
 function adminTab(tab, btn){
   document.querySelectorAll('.admin-tab').forEach(function(b){b.classList.remove('active');});
   btn.classList.add('active');
-  var fns={dashboard:adminDashboard,orders:adminOrders,products:adminProducts,stats:adminStats,loyalty:adminLoyalty,config:adminConfig,invoices:adminInvoices};
+  var fns={dashboard:adminDashboard,orders:adminOrders,products:adminProducts,stats:adminStats,loyalty:adminLoyalty,config:adminConfig,invoices:adminInvoices,marketcodes:adminMarketCodes};
   if(fns[tab]) document.getElementById('admin-content').innerHTML=fns[tab]();
 }
+
+function buildMsgCreneauSection() {
+  var today = new Date().toISOString().split('T')[0];
+  var cfg = getCfg();
+  var slots = getSlots(today, cfg);
+  if (!slots.length) return '<div class="text-sm text-muted">Aucun creneau aujourd\'hui</div>';
+  var html = '<div class="card" style="padding:.75rem">';
+  html += '<div class="form-group"><label class="form-label">Creneau</label><select class="form-select" id="msg-slot-select">';
+  slots.forEach(function(s){ html += '<option value="'+s.time+'">'+s.time+' ('+s.count+' cmd)</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">Message</label>';
+  html += '<textarea class="form-input" id="msg-slot-text" rows="2" placeholder="Ex: Votre commande est prete !" style="resize:none"></textarea></div>';
+  html += '<button class="btn btn-primary btn-sm btn-full" onclick="sendMsgToCreneau()">Envoyer a ce creneau</button>';
+  html += '</div>';
+  return html;
+}
+
+function sendMsgToCreneau() {
+  var slot = document.getElementById('msg-slot-select') ? document.getElementById('msg-slot-select').value : '';
+  var msg = document.getElementById('msg-slot-text') ? document.getElementById('msg-slot-text').value.trim() : '';
+  if (!slot || !msg) { toast('Remplissez creneau et message','error'); return; }
+  var today = new Date().toISOString().split('T')[0];
+  var orders = getOrders().filter(function(o){
+    return o.pickupDate===today && o.pickupTime===slot && ['pending','confirmed','preparing','ready'].indexOf(o.status)>=0;
+  });
+  if (!orders.length) { toast('Aucun client actif sur ce creneau','info'); return; }
+  orders.forEach(function(o){ notify(o.userId, 'Break Antillais', msg); });
+  toast('Message envoye a '+orders.length+' client(s) !','success');
+  var el = document.getElementById('msg-slot-text');
+  if(el) el.value = '';
+}
+
 function adminDashboard(){
   var orders = getOrders();
   var today = new Date().toISOString().split('T')[0];
@@ -2348,7 +2411,9 @@ function adminDashboard(){
     +'<div style="display:flex;gap:.5rem;margin-bottom:1rem">'
     +'<button class="btn btn-secondary btn-sm" style="flex:1;background:rgba(37,211,102,.15);border-color:rgba(37,211,102,.4);color:#25d366" onclick="exportWhatsApp()">💬 Résumé WhatsApp</button>'
     +'<button class="btn btn-secondary btn-sm" style="flex:1" onclick="adminTab(&apos;stats&apos;,document.querySelector(&apos;.admin-tab:nth-child(3)&apos;))">📊 Statistiques</button>'
-    +'</div>';
+    +'</div>'
+    +'<div class="sec-title">Message par creneau</div>'
+    +'<div id="msg-creneau-wrap">'+buildMsgCreneauSection()+'</div>';
 
   html += '</div>';
 
@@ -2380,24 +2445,51 @@ function exportWhatsApp() {
   var total = orders.reduce(function(s,o){return s+o.total;},0);
   var done = orders.filter(function(o){return o.status==='picked_up';}).length;
   var dateStr = new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  var lines = [];
-  lines.push('🌴 *Break Antillais - '+dateStr+'*');
-  lines.push('📦 *'+orders.length+' commande(s)* - '+fmt(total));
-  lines.push('✅ Recuperees: '+done+'/'+orders.length);
-  lines.push('');
-  lines.push('*Detail des commandes:*');
+  var catCount = {};
+  var totalItems = 0;
+  var catLabel = {bokit:'Bokit',agoulou:'Agoulou',crepe_salee:'Crepe Salee',crepe_sucree:'Crepe Sucree',mini_bokit:'Mini Bokit',enfant:'Menu Enfant',boisson:'Boisson'};
   orders.forEach(function(o){
-    var st = {pending:'⏳',confirmed:'✅',preparing:'👨‍🍳',ready:'🎉',picked_up:'✔️'};
-    lines.push('');
-    lines.push((st[o.status]||'?')+' *N°'+o.orderNumber+'* - '+o.userPrenom+' ('+o.pickupTime+')');
-    o.items.forEach(function(i){ lines.push('  - '+i.name+(i.details?' ('+i.details.split('|')[0]+')':'')); });
-    lines.push('  💰 '+fmt(o.total)+' - '+o.payment);
+    o.items.forEach(function(it){
+      totalItems++;
+      var cat = it.cat || 'autre';
+      catCount[cat] = (catCount[cat]||0)+1;
+    });
   });
+  var lines = [];
+  lines.push('BREAK ANTILLAIS - ' + dateStr.toUpperCase());
+  lines.push('========================');
+  lines.push(orders.length+' commande(s) | '+totalItems+' article(s)');
+  lines.push('CA estime : '+fmt(total));
+  lines.push('Recuperees : '+done+'/'+orders.length);
+  lines.push('');
+  lines.push('--- RECAP PAR PRODUIT ---');
+  Object.keys(catCount).sort().forEach(function(cat){
+    lines.push((catLabel[cat]||cat)+' : '+catCount[cat]);
+  });
+  lines.push('');
+  lines.push('--- DETAIL PAR CRENEAU ---');
+  var bySlot = {};
+  orders.forEach(function(o){
+    if(!bySlot[o.pickupTime]) bySlot[o.pickupTime] = [];
+    bySlot[o.pickupTime].push(o);
+  });
+  var st = {pending:'[ATT]',confirmed:'[OK]',preparing:'[PREP]',ready:'[PRET]',picked_up:'[DONE]'};
+  Object.keys(bySlot).sort().forEach(function(slot){
+    var slotOrders = bySlot[slot];
+    lines.push('');
+    lines.push(slot+' ('+slotOrders.length+' cmd)');
+    slotOrders.forEach(function(o){
+      lines.push((st[o.status]||'?')+' N'+o.orderNumber+' - '+o.userPrenom);
+      o.items.forEach(function(i){ lines.push('  > '+i.name+(i.details?' ('+i.details.split('|')[0]+')':'')); });
+      lines.push('  '+fmt(o.total)+' - '+o.payment);
+    });
+  });
+  lines.push('');
+  lines.push('========================');
+  lines.push('Break Antillais App');
   var msg = lines.join('\n');
-  var url = 'https://wa.me/33659502975?text='+encodeURIComponent(msg);
-  window.open(url,'_blank');
+  window.open('https://wa.me/33659502975?text='+encodeURIComponent(msg),'_blank');
 }
-
 function toggleAdminAlert(btn) {
   _adminAlertEnabled = !_adminAlertEnabled;
   btn.textContent = _adminAlertEnabled ? '🔔 Alertes ON' : '🔕 Alertes OFF';
@@ -2451,7 +2543,23 @@ function adminOrders(){
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-top:1px solid var(--border)">'
       +'<span class="text-gold fw-800" style="font-size:1.05rem">'+fmt(o.total)+'</span>'
       +'<span class="text-sm text-muted">⏰ '+o.pickupDate+' à '+o.pickupTime+' · '+o.payment+'</span></div>';
-    if(nxt) html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">→ '+nextL[nxt]+'</button>';
+    if(nxt==='preparing') {
+      html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">Demarrer preparation</button>';
+    } else if(nxt==='ready' && o.status==='preparing') {
+      html+='<div style="background:var(--dark4);border-radius:8px;padding:.5rem;margin-top:.4rem">';
+      html+='<div class="text-sm fw-700 mb-1">Valider produit par produit :</div>';
+      o.items.forEach(function(it,idx){
+        var isDone = o.itemsStatus && o.itemsStatus[idx]==='done';
+        html+='<div style="display:flex;align-items:center;justify-content:space-between;padding:.25rem 0;font-size:.8rem">'
+          +'<span>'+(isDone?'[OK]':'[ ]')+' '+it.name+'</span>'
+          +(isDone?'<span style="color:#10b981;font-size:.75rem">Pret</span>':'<button class="btn btn-sm" style="padding:.2rem .5rem;font-size:.72rem;background:rgba(16,185,129,.15);border-color:#10b981;color:#10b981" data-oid="'+o.id+'" data-idx="'+idx+'" onclick="markItemDone(this.dataset.oid,this.dataset.idx)">Pret</button>')
+          +'</div>';
+      });
+      html+='</div>';
+      html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">Toute la commande est prete</button>';
+    } else if(nxt) {
+      html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">→ '+nextL[nxt]+'</button>';
+    }
     if(canCancel) html+='<button class="btn btn-danger btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="cancelOrder(this.dataset.oid)">Annuler la commande</button>';
     html+='</div>';
   });
@@ -2475,6 +2583,24 @@ function adminOrders(){
     });
   }
   return html+'</div>';
+}
+
+function markItemDone(orderId, itemIdx) {
+  var orders = getOrders();
+  var o = orders.find(function(x){ return x.id===orderId; });
+  if (!o) return;
+  if (!o.itemsStatus) o.itemsStatus = {};
+  o.itemsStatus[parseInt(itemIdx)] = 'done';
+  saveOrder(o);
+  var item = o.items[parseInt(itemIdx)];
+  if (item) {
+    db.ref('status_updates/'+o.userId+'/item-'+orderId+'-'+itemIdx).set({
+      status:'item_ready', orderId:orderId, orderNumber:o.orderNumber,
+      title:'En cours...', body:item.name+' est pret !', at:new Date().toISOString()
+    });
+  }
+  toast('Produit marque pret','success');
+  document.getElementById('admin-content').innerHTML = adminOrders();
 }
 
 function advanceOrder(id){
@@ -2661,6 +2787,15 @@ function prodForm(p){
       +'</div><div class="divider"></div>';
   }
 
+  var ALLERGENS = ['Gluten','Oeufs','Lait','Soja','Fruits a coque','Arachides','Poisson'];
+  var pAllergens = p.allergens || [];
+  html += '<div class="form-group"><label class="form-label">Allergenes</label><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.3rem">';
+  ALLERGENS.forEach(function(a){
+    var checked = pAllergens.indexOf(a) >= 0;
+    html += '<label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.75rem;background:var(--dark4);padding:.25rem .5rem;border-radius:100px;border:1px solid '+(checked?'#f59e0b':'var(--border)')+';">'
+      +'<input type="checkbox" name="pf-allergen" value="'+a+'"'+(checked?' checked':'')+' style="accent-color:#f59e0b"> '+a+'</label>';
+  });
+  html += '</div></div>';
   html += '<div class="form-group"><label class="form-label">Photo</label>'
     +'<input type="file" accept="image/*" class="form-input" id="pf-img" onchange="previewImg(this)"/>'
     +(p.image?'<img src="'+p.image+'" id="pf-prev" style="width:100%;height:110px;object-fit:cover;border-radius:8px;margin-top:.4rem">':'<div id="pf-prev"></div>')
@@ -2671,7 +2806,6 @@ function previewImg(input){
   var f=input.files[0]; if(!f) return;
   var r=new FileReader();
   r.onload=function(e){
-    _newImg=e.target.result;
     var prev=document.getElementById('pf-prev');
     if(prev){
       if(prev.tagName==='IMG') prev.src=e.target.result;
@@ -2679,6 +2813,19 @@ function previewImg(input){
     }
   };
   r.readAsDataURL(f);
+  var btn = document.querySelector('button[onclick*="saveNewProd"],button[onclick*="saveEditProd"]');
+  if(btn) btn.disabled = true;
+  toast('Upload en cours...','info',3000);
+  var ref = storage.ref('products/' + Date.now() + '_' + f.name.replace(/[^a-zA-Z0-9.]/g,'_'));
+  ref.put(f).then(function(snap){ return snap.ref.getDownloadURL(); }).then(function(url){
+    _newImg = url;
+    if(btn) btn.disabled = false;
+    toast('Photo uploadee !','success',2000);
+  }).catch(function(e){
+    var r2=new FileReader();
+    r2.onload=function(ev){ _newImg=ev.target.result; if(btn) btn.disabled=false; toast('Photo prete','success',2000); };
+    r2.readAsDataURL(f);
+  });
 }
 function showAddProduct(){
   _newImg=null;
@@ -2722,7 +2869,8 @@ function getProdFormData(){
     soon: soon ? soon.checked : false,
     featured: document.getElementById('pf-feat') ? document.getElementById('pf-feat').checked : false,
     stock: stockEl && stockEl.value!=='' ? parseInt(stockEl.value) : null,
-    stockAlert: stockAlertEl && stockAlertEl.value!=='' ? parseInt(stockAlertEl.value) : 3
+    stockAlert: stockAlertEl && stockAlertEl.value!=='' ? parseInt(stockAlertEl.value) : 3,
+    allergens: Array.from(document.querySelectorAll('input[name="pf-allergen"]:checked')).map(function(el){return el.value;})
   };
 }
 function saveNewProd(){
@@ -2871,6 +3019,130 @@ function adminStats(period){
   }
   return html+'</div>';
 }
+
+function generateMarketCode(userId, amount) {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var rand = function(n){ var s=''; for(var i=0;i<n;i++) s+=chars[Math.floor(Math.random()*chars.length)]; return s; };
+  var code = 'BA-' + rand(4) + '-' + rand(4);
+  var cfg = getCfg();
+  var pts = Math.floor(amount) * (cfg.ptsPerEuro || 10);
+  var obj = {code:code, userId:userId, amount:amount, pts:pts, createdAt:new Date().toISOString(), used:false};
+  db.ref('data/market_codes/' + code).set(obj);
+  return obj;
+}
+
+function adminMarketCodes() {
+  var users = getUsers().filter(function(u){ return !u.role || u.role==='client'; });
+  var html = '<div style="padding:.75rem">';
+  html += '<div class="sec-title">Codes Marche</div>';
+  html += '<p class="text-sm text-muted mb-2">Generez un code pour crediter des points a un client apres un achat sur le stand.</p>';
+  html += '<div class="card mb-2">';
+  html += '<div class="form-group"><label class="form-label">Client</label>';
+  html += '<select class="form-select" id="mc-user"><option value="">-- Choisir --</option>';
+  users.forEach(function(u){ html += '<option value="'+u.id+'">'+u.prenom+' ('+u.phone+')</option>'; });
+  html += '</select></div>';
+  html += '<div class="form-group"><label class="form-label">Montant (EUR)</label>';
+  html += '<input class="form-input" id="mc-amount" type="number" step="0.01" min="1" placeholder="Ex: 15.50"/></div>';
+  html += '<button class="btn btn-primary btn-full" onclick="createMarketCode()">Generer le code</button>';
+  html += '</div><div id="mc-result"></div>';
+  html += '<div class="sec-title">Codes recents</div>';
+  html += '<div id="mc-history"><div class="text-sm text-muted">Chargement...</div></div>';
+  html += '</div>';
+  setTimeout(function(){ loadMarketCodesHistory(); }, 200);
+  return html;
+}
+
+function createMarketCode() {
+  var userId = document.getElementById('mc-user') ? document.getElementById('mc-user').value : '';
+  var amount = document.getElementById('mc-amount') ? parseFloat(document.getElementById('mc-amount').value) : 0;
+  if (!userId) { toast('Choisissez un client','error'); return; }
+  if (!amount || amount <= 0) { toast('Montant invalide','error'); return; }
+  var users = getUsers();
+  var u = users.find(function(x){ return x.id === userId; });
+  if (!u) { toast('Client introuvable','error'); return; }
+  var codeObj = generateMarketCode(userId, amount);
+  var res = document.getElementById('mc-result');
+  if (res) {
+    var btnHtml = '<button class="btn btn-secondary btn-sm mt-2" onclick="shareMarketCode(this)">Partager via SMS/WhatsApp</button>';
+    res.innerHTML = '<div class="card" style="background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3);text-align:center;padding:1.25rem">'
+      + '<div style="font-size:.8rem;color:var(--muted);margin-bottom:.25rem">Code pour ' + u.prenom + '</div>'
+      + '<div style="font-family:var(--head);font-size:1.8rem;font-weight:800;color:#10b981;letter-spacing:.1em" id="mc-code-display">' + codeObj.code + '</div>'
+      + '<div style="font-size:.82rem;margin-top:.4rem;color:var(--muted)">' + amount.toFixed(2) + 'EUR &rarr; <strong style="color:var(--gold)">+' + codeObj.pts + ' pts</strong></div>'
+      + '<div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">Usage unique &bull; Valable 7 jours</div>'
+      + btnHtml
+      + '</div>';
+    res.dataset.code = codeObj.code;
+    res.dataset.prenom = u.prenom;
+    res.dataset.pts = codeObj.pts;
+  }
+  toast('Code genere !','success');
+}
+
+function shareMarketCode(btn) {
+  var res = document.getElementById('mc-result');
+  var code = res ? res.dataset.code : '';
+  var prenom = res ? res.dataset.prenom : '';
+  var pts = res ? res.dataset.pts : '';
+  var msg = 'Break Antillais\n\nBonjour ' + prenom + ' !\nVotre code fidelite pour votre achat sur notre stand :\n\n' + code + '\n\nEntrez-le dans l\'app pour gagner +' + pts + ' points !\nhttps://break-antillais.github.io/break-antillais';
+  if (navigator.share) {
+    navigator.share({ title: 'Code Break Antillais', text: msg });
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  }
+}
+
+function loadMarketCodesHistory() {
+  var hist = document.getElementById('mc-history');
+  if (!hist) return;
+  db.ref('data/market_codes').orderByChild('createdAt').limitToLast(10).once('value').then(function(snap){
+    var codes = [];
+    snap.forEach(function(c){ codes.unshift(c.val()); });
+    if (!codes.length) { hist.innerHTML = '<div class="text-sm text-muted">Aucun code genere</div>'; return; }
+    var users = getUsers();
+    var h = '';
+    codes.forEach(function(c){
+      var u = users.find(function(x){ return x.id === c.userId; });
+      var name = u ? u.prenom : 'Client';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.82rem">'
+        + '<div><div class="fw-700" style="font-family:monospace">' + c.code + '</div>'
+        + '<div class="text-muted" style="font-size:.75rem">' + name + ' &bull; ' + c.amount.toFixed(2) + 'EUR &bull; +' + c.pts + ' pts</div></div>'
+        + '<span style="color:' + (c.used ? 'var(--muted)' : '#10b981') + ';font-weight:700;font-size:.75rem">' + (c.used ? 'Utilise' : 'Actif') + '</span>'
+        + '</div>';
+    });
+    hist.innerHTML = h;
+  }).catch(function(){ hist.innerHTML = '<div class="text-sm text-muted">Erreur chargement</div>'; });
+}
+
+function redeemMarketCodeFromInput() {
+  var el = document.getElementById('market-code-input');
+  if (el) redeemMarketCode(el.value);
+}
+
+function redeemMarketCode(code) {
+  if (!code || !code.trim()) { toast('Entrez un code','error'); return; }
+  var codeUpper = code.trim().toUpperCase();
+  db.ref('data/market_codes/' + codeUpper).once('value').then(function(snap){
+    var c = snap.val();
+    if (!c) { toast('Code invalide','error'); return; }
+    if (c.used) { toast('Ce code a deja ete utilise','error'); return; }
+    var user = getCurrentUser();
+    if (!user) { toast('Connectez-vous','error'); return; }
+    if (c.userId !== user.id) { toast('Ce code n\'est pas pour votre compte','error'); return; }
+    var created = new Date(c.createdAt);
+    if ((new Date() - created) > 7*24*60*60*1000) { toast('Code expire','error'); return; }
+    db.ref('data/market_codes/' + codeUpper + '/used').set(true);
+    user.points = (user.points || 0) + c.pts;
+    db.ref('data/users/' + user.id + '/points').set(user.points);
+    var hist = load('ba_pts_history_' + user.id, []);
+    hist.unshift({pts: c.pts, label: 'Achat marche (' + c.amount.toFixed(2) + 'EUR)', at: new Date().toISOString()});
+    save('ba_pts_history_' + user.id, hist);
+    saveUser(user);
+    setCurrentUser(user);
+    toast('+' + c.pts + ' points ajoutes !', 'success', 4000);
+    renderProfile();
+  }).catch(function(){ toast('Erreur verification','error'); });
+}
+
 function adminLoyalty(){
   var cfg=getCfg();
   var paliers=load('ba_paliers', PALIERS);
@@ -3342,12 +3614,14 @@ function buildMeatsList() {
   var meats = getMeats();
   var html = '';
   meats.forEach(function(m, i){
-    html += '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">'
-      +'<input class="form-input" id="meat-name-'+i+'" value="'+m.name+'" placeholder="Viande" style="flex:2"/>'
-      +'<input class="form-input" id="meat-price-'+i+'" type="number" step="0.01" value="'+m.price+'" style="flex:1;max-width:80px"/>'
-      +'<label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.78rem;white-space:nowrap">'
+    html += '<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem;flex-wrap:wrap">'
+      +'<input class="form-input" id="meat-name-'+i+'" value="'+m.name+'" placeholder="Viande" style="flex:2;min-width:80px"/>'
+      +'<input class="form-input" id="meat-price-'+i+'" type="number" step="0.01" value="'+m.price+'" style="flex:1;max-width:70px"/>'
+      +'<label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.75rem;white-space:nowrap">'
       +'<input type="checkbox" id="meat-ok-'+i+'"'+(m.ok?' checked':'')+' style="accent-color:var(--red)"> Dispo</label>'
-      +'<button class="btn btn-danger btn-sm" data-mi="'+i+'" onclick="deleteMeat(this.dataset.mi)" style="padding:.3rem .5rem">🗑</button>'
+      +'<label style="display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.75rem;white-space:nowrap">'
+      +'<input type="checkbox" id="meat-halal-'+i+'"'+(m.halal?' checked':'')+' style="accent-color:#10b981"> Halal</label>'
+      +'<button class="btn btn-danger btn-sm" data-mi="'+i+'" onclick="deleteMeat(this.dataset.mi)" style="padding:.3rem .5rem">X</button>'
       +'</div>';
   });
   return html;
@@ -3363,7 +3637,8 @@ function saveMeats() {
     updated.push({
       name: n.value.trim() || ('Viande '+i),
       price: p ? (parseFloat(p.value)||6.50) : 6.50,
-      ok: o ? o.checked : true
+      ok: o ? o.checked : true,
+      halal: document.getElementById('meat-halal-'+i) ? document.getElementById('meat-halal-'+i).checked : false
     });
     i++;
   }
@@ -4144,7 +4419,7 @@ function showRewardConfig(productName, palierName, prod) {
       var unavail = !mt.ok;
       html += '<button class="chip" data-v="'+mt.name+'"'
         +(unavail?' disabled style="opacity:.4;cursor:not-allowed"':' onclick="toggleMeat(this,'+mc+')"')+'>'
-        +mt.name+(unavail?' <span style="color:#ef4444;font-size:.65rem">(indispo)</span>':'')+'</button>';
+        +(mt.halal?'[Halal] ':'')+mt.name+(unavail?' <span style="color:#ef4444;font-size:.65rem">(indispo)</span>':'')+'</button>';
     });
     html += '</div></div>';
   }
@@ -4439,6 +4714,10 @@ function startCountdown() {
   // Load all data from Firebase first, then start app
   loadFromFirebase(function() {
     var users = getUsers();
+    if (!users.find(function(u){ return u.role==='preparateur'; })) {
+      var prepUser = {id:'prep-default',role:'preparateur',prenom:'Preparateur',email:'prep@break-antillais.fr',pwd:'Prep2024!',phone:'0000000000',points:0,notifs:[],createdAt:new Date().toISOString()};
+      saveUser(prepUser); saveUserToFirebase(prepUser);
+    }
     if (!users.find(function(u){ return u.role==='superadmin'||u.role==='admin'; })) {
       var adminUser = {
         id:'admin-default', role:'superadmin',
