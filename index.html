@@ -187,6 +187,10 @@ body > *:not(#loading):not(#app-bg):not(nav) { position:relative; z-index:1; }
 .modal-checkout .checkout-body { padding:1rem 1.2rem; }
 .modal-checkout .checkout-foot { padding:.9rem 1.2rem; border-top:1px solid var(--border); background:var(--dark2); flex-shrink:0; }
 
+/* Forcing modals to stay fully visible (no scroll) on small screens */
+.modal-fit-no-scroll { overflow: hidden !important; }
+.modal-fit-no-scroll .modal-scroll { overflow: hidden !important; }
+
 @media (max-width: 640px) {
   .modal { border-radius: var(--radius) var(--radius) 0 0; }
 }
@@ -991,6 +995,27 @@ function closeModal(id) {
   var el = document.getElementById(id||'m-product');
   if (el) { el.style.display='none'; el.innerHTML=''; }
 }
+// Auto-fit the main modal to avoid any scroll on small screens.
+// Uses zoom (simpler than transform for layout in this page).
+function fitModalNoScroll(modalEl) {
+  if (!modalEl) return;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  var targetH = Math.max(320, vh - 96); // leave a little breathing room
+  var contentH = modalEl.scrollHeight || modalEl.offsetHeight || 0;
+  if (!contentH) return;
+  var scale = Math.min(1, targetH / contentH);
+  modalEl.style.zoom = (scale < 1) ? scale.toFixed(3) : '1';
+}
+function fitMainNoScrollModal() {
+  var host = document.getElementById('m-product');
+  if (!host || host.style.display === 'none') return;
+  var modalEl = host.querySelector('.modal-fit-no-scroll');
+  if (!modalEl) return;
+  // Run twice to catch late layout (fonts/images)
+  fitModalNoScroll(modalEl);
+  setTimeout(function(){ fitModalNoScroll(modalEl); }, 120);
+}
+window.addEventListener('resize', function(){ fitMainNoScrollModal(); });
 function go(id) {
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   var sc = document.getElementById('s-'+id);
@@ -1530,7 +1555,7 @@ function continueOpenProduct(id) {
     : '<div style="text-align:center;font-size:2.8rem;margin-bottom:.4rem">'+(EMOJI[p.cat]||'🍽')+'</div>';
 
   var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
-    +'<div class="modal" style="max-height:92vh;position:relative"><div class="modal-handle"></div>'
+    +'<div class="modal modal-fit-no-scroll" style="max-height:92vh;position:relative"><div class="modal-handle"></div>'
     +'<button onclick="closeModal(&apos;m-product&apos;)" style="position:absolute;top:.75rem;left:1rem;background:rgba(255,255,255,.08);border:none;color:var(--text);font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;padding:.35rem .7rem;border-radius:100px;font-weight:600;z-index:10">← Retour</button>'
     +'<div style="height:2rem"></div>'
     +modalVisualHtml
@@ -1623,6 +1648,7 @@ function continueOpenProduct(id) {
 
   var m = document.getElementById('m-product');
   m.innerHTML = html; m.style.display = 'block';
+  fitMainNoScrollModal();
 }
 
 
@@ -1906,7 +1932,7 @@ function showCheckout() {
   }
 
   var html='<div class="modal-overlay">'
-    +'<div class="modal modal-checkout" id="checkout-modal">'
+    +'<div class="modal modal-checkout modal-fit-no-scroll" id="checkout-modal">'
 
     // Header fixe
     +'<div class="checkout-head">'
@@ -1963,6 +1989,7 @@ function showCheckout() {
   var m=document.getElementById('m-product');
   m.innerHTML=html; m.style.display='block';
   window._selectedDate = _selDate;
+  fitMainNoScrollModal();
 }
 
 
@@ -4860,7 +4887,7 @@ function addRewardToCartByPalier(palierName) {
   // Show product picker modal
   var m = document.getElementById('m-product');
   var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
-    +'<div class="modal"><div class="modal-handle"></div>'
+    +'<div class="modal modal-fit-no-scroll"><div class="modal-handle"></div>'
     +'<div style="text-align:center;margin-bottom:1rem">'
     +'<div style="font-size:2.5rem">'+pal.icon+'</div>'
     +'<h2 class="modal-title" style="margin:.5rem 0">Choisissez votre produit offert</h2>'
@@ -4893,6 +4920,7 @@ function addRewardToCartByPalier(palierName) {
 
   m.innerHTML = html;
   m.style.display = 'block';
+  fitMainNoScrollModal();
 }
 
 function confirmRewardChoice(productName, palierName) {
