@@ -802,6 +802,9 @@ var cart = [];
 var currentScreen = 'home';
 var pendingProd = null;
 var pendingExtras = {meats:[], sauces:[], crudites:[], supplements:[]};
+var _manualCart = [];
+var _manualOrderMode = false;
+var _manualOrderData = {prenom:'', phone:'', slot:'', payment:'Especes'};
 var _slot = null;
 var _payment = null;
 var _boxQtys = {};
@@ -1795,6 +1798,16 @@ function addToCart() {
     cartName = 'Bokit '+pendingExtras.meats[0];
   }
   var qtyToAdd = _pendingQty || 1;
+  // Mode commande manuelle admin
+  if (_manualOrderMode) {
+    for (var qi = 0; qi < qtyToAdd; qi++) {
+      _manualCart.push({id:genId(),pid:pendingProd.id,name:cartName,price:finalPrice,cat:pendingProd.cat,details:details.join(' | '),qty:1});
+    }
+    var qtyMsg2 = qtyToAdd > 1 ? ' x'+qtyToAdd : '';
+    toast(cartName+qtyMsg2+' ajouté au panier','success',1500);
+    renderManualOrderModal();
+    return;
+  }
   for (var qi = 0; qi < qtyToAdd; qi++) {
     cart.push({id:genId(),pid:pendingProd.id,name:cartName,price:finalPrice,cat:pendingProd.cat,details:details.join(' | '),qty:1});
   }
@@ -2872,114 +2885,156 @@ function adminPrepa() {
 
 
 
+var _manualCart = [];
+var _manualOrderMode = false;
+var _manualOrderData = {prenom:'', phone:'', slot:'', payment:'Especes'};
+
 function openManualOrder() {
+  _manualCart = [];
+  _manualOrderMode = true;
+  _manualOrderData = {prenom:'', phone:'', slot:'', payment:'Especes'};
+  renderManualOrderModal();
+}
+
+function renderManualOrderModal() {
   var cfg = getCfg();
   var today = new Date().toISOString().split('T')[0];
   var slots = getSlots(today, cfg);
-  var products = getProducts().filter(function(p){ return p.ok !== false; });
-  var CAT_LABELS = {bokit:'Bokits',agoulou:'Agoulous',crepe_salee:'Crêpes Salées',crepe_sucree:'Crêpes Sucrées',mini_bokit:'Mini Bokits',enfant:'Menus Enfants',boisson:'Boissons'};
+  var CAT_LABELS = {bokit:'🫓 Bokits',agoulou:'🌯 Agoulous',crepe_salee:'🥞 Crêpes Salées',crepe_sucree:'🍫 Crêpes Sucrées',mini_bokit:'📦 Mini Bokits',enfant:'🧒 Enfants',boisson:'🥤 Boissons'};
   var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','enfant','boisson'];
+  var products = getProducts().filter(function(p){ return p.ok !== false; });
   var bycat = {};
   products.forEach(function(p){ if (!bycat[p.cat]) bycat[p.cat]=[]; bycat[p.cat].push(p); });
 
-  var slotsHtml = '<option value="">-- Choisir --</option>';
-  slots.forEach(function(s){ slotsHtml += '<option value="'+s.time+'">'+s.time+'</option>'; });
+  var slotsHtml = '<option value="">-- Heure de retrait --</option>';
+  slots.forEach(function(s){ slotsHtml += '<option value="'+s.time+'"'+(s.time===_manualOrderData.slot?' selected':'')+'>'+s.time+'</option>'; });
 
+  // Récap panier en cours
+  var cartHtml = '';
+  if (_manualCart.length) {
+    var counts = {};
+    _manualCart.forEach(function(i){ var k = i.name+(i.details?'|'+i.details:''); if(!counts[k])counts[k]={name:i.name,details:i.details,price:i.price,qty:0}; counts[k].qty++; });
+    cartHtml = '<div class="sec-title" style="margin-top:.5rem">🛒 Panier ('+ _manualCart.length +')</div><div class="card" style="padding:.5rem .75rem;margin-bottom:.75rem">';
+    Object.values(counts).forEach(function(it){
+      cartHtml += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.05)">';
+      cartHtml += '<div style="flex:1"><div style="font-size:.85rem;font-weight:600">'+(it.qty>1?it.qty+'× ':'')+it.name+'</div>';
+      if (it.details) cartHtml += '<div style="font-size:.7rem;color:var(--muted)">'+it.details+'</div>';
+      cartHtml += '</div>';
+      cartHtml += '<div style="display:flex;align-items:center;gap:.4rem">';
+      cartHtml += '<span style="color:var(--gold);font-size:.82rem">'+(it.price*it.qty).toFixed(2)+'€</span>';
+      cartHtml += '<button onclick="moRemoveItem(\''+it.name.replace(/'/g,'&apos;')+'\')" style="background:rgba(200,35,43,.2);border:none;color:#ef4444;border-radius:4px;padding:.1rem .35rem;cursor:pointer;font-size:.75rem">✕</button>';
+      cartHtml += '</div></div>';
+    });
+    var total = _manualCart.reduce(function(s,i){return s+i.price;},0);
+    cartHtml += '<div style="display:flex;justify-content:space-between;padding:.4rem 0;font-weight:800"><span>Total</span><span style="color:var(--gold)">'+total.toFixed(2)+'€</span></div>';
+    cartHtml += '</div>';
+  }
+
+  // Liste produits avec bouton +
   var prodsHtml = '';
   catOrder.forEach(function(cat){
     if (!bycat[cat]||!bycat[cat].length) return;
     prodsHtml += '<div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;margin:.75rem 0 .3rem">'+(CAT_LABELS[cat]||cat)+'</div>';
     bycat[cat].forEach(function(p){
-      prodsHtml += '<div style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;border-bottom:1px solid rgba(255,255,255,.05)">';
+      var needsConfig = ['bokit','crepe_salee','agoulou'].indexOf(p.cat)>=0;
+      prodsHtml += '<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,.05)">';
       prodsHtml += '<div style="flex:1;font-size:.85rem">'+p.name+'<span style="color:var(--gold);font-size:.75rem;margin-left:.4rem">'+p.price.toFixed(2)+'€</span></div>';
-      prodsHtml += '<input type="number" min="0" max="20" value="0" data-pid="'+p.id+'" data-pname="'+p.name+'" data-pprice="'+p.price+'" data-pcat="'+p.cat+'" class="mo-qty" style="width:52px;text-align:center;background:var(--dark4);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:.25rem;font-size:.85rem" oninput="updateManualTotal()">';
+      if (needsConfig) {
+        prodsHtml += '<button onclick="moConfigProduct(\''+p.id+'\')" style="background:var(--red);border:none;color:#fff;border-radius:6px;padding:.3rem .7rem;cursor:pointer;font-size:.8rem;font-weight:700">+ Config</button>';
+      } else {
+        prodsHtml += '<button onclick="moAddSimple(\''+p.id+'\',\''+p.name.replace(/'/g,'&apos;')+'\','+p.price+',\''+p.cat+'\')" style="background:var(--red);border:none;color:#fff;border-radius:6px;padding:.3rem .7rem;cursor:pointer;font-size:.8rem;font-weight:700">+</button>';
+      }
       prodsHtml += '</div>';
     });
   });
 
   var m = document.getElementById('m-product');
-  var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
+  var html = '<div class="modal-overlay" onclick="if(event.target===this){_manualOrderMode=false;closeModal(&apos;m-product&apos;)}">'
     +'<div class="modal">'
     +'<div style="position:sticky;top:-1.4rem;z-index:20;background:var(--dark2);margin:-1.4rem -1.4rem .8rem;padding:.55rem 1rem .45rem;border-bottom:1px solid rgba(255,255,255,.08)">'
-    +'<button onclick="closeModal(&apos;m-product&apos;)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;padding:.35rem .75rem;border-radius:100px;font-weight:600">← Retour</button>'
+    +'<button onclick="_manualOrderMode=false;closeModal(&apos;m-product&apos;)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:.3rem;padding:.35rem .75rem;border-radius:100px;font-weight:600;white-space:nowrap">← Retour</button>'
     +'</div>'
     +'<h2 class="modal-title">📝 Commande client</h2>'
     +'<div class="form-group"><label class="form-label">Prénom client *</label>'
-    +'<input class="form-input" id="mo-prenom" placeholder="Ex: Michel"/></div>'
+    +'<input class="form-input" id="mo-prenom" placeholder="Ex: Michel" value="'+_manualOrderData.prenom+'" oninput="_manualOrderData.prenom=this.value"/></div>'
     +'<div class="form-group"><label class="form-label">Téléphone (pour SMS)</label>'
-    +'<input class="form-input" id="mo-phone" type="tel" placeholder="Ex: 0612345678"/></div>'
+    +'<input class="form-input" id="mo-phone" type="tel" placeholder="Ex: 0612345678" value="'+_manualOrderData.phone+'" oninput="_manualOrderData.phone=this.value"/></div>'
     +'<div class="form-group"><label class="form-label">Heure de retrait *</label>'
-    +'<select class="form-select" id="mo-slot">'+slotsHtml+'</select></div>'
+    +'<select class="form-select" id="mo-slot" onchange="_manualOrderData.slot=this.value">'+slotsHtml+'</select></div>'
     +'<div class="form-group"><label class="form-label">Règlement</label>'
     +'<div style="display:flex;gap:.5rem">'
-    +'<button class="btn btn-secondary" id="mo-pay-esp" onclick="moSetPay(\'Especes\')" style="flex:1">💵 Espèces</button>'
-    +'<button class="btn btn-secondary" id="mo-pay-card" onclick="moSetPay(\'Carte\')" style="flex:1">💳 Carte</button>'
+    +'<button class="btn btn-secondary" id="mo-pay-esp" onclick="moSetPay(\'Especes\')" style="flex:1;'+(( _manualOrderData.payment==='Especes')?'background:var(--red)':'')+'" >💵 Espèces</button>'
+    +'<button class="btn btn-secondary" id="mo-pay-card" onclick="moSetPay(\'Carte\')" style="flex:1;'+((_manualOrderData.payment==='Carte')?'background:var(--red)':'')+'" >💳 Carte</button>'
     +'</div></div>'
-    +'<div class="form-group"><label class="form-label">Produits</label>'+prodsHtml+'</div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin:.75rem 0;padding:.6rem .8rem;background:var(--dark3);border-radius:var(--radius-sm)">'
-    +'<span class="fw-700">Total</span>'
-    +'<span class="fw-800 font-head" id="mo-total" style="color:var(--gold)">0,00€</span>'
-    +'</div>'
-    +'<div class="form-group"><label class="form-label">Note cuisine (optionnel)</label>'
-    +'<input class="form-input" id="mo-note" placeholder="Ex: sans oignon..."/></div>'
-    +'<button class="btn btn-primary btn-full mt-1" onclick="submitManualOrder()">✅ Valider et générer récap</button>'
+    + cartHtml
+    +'<div class="form-group"><label class="form-label">Ajouter des produits</label>'
+    +prodsHtml+'</div>'
+    +(_manualCart.length ? '<button class="btn btn-primary btn-full mt-2" onclick="submitManualOrder()">✅ Valider la commande</button>' : '')
     +'</div></div>';
   m.innerHTML = html; m.style.display = 'block';
-  window._moPay = 'Especes';
-  moSetPay('Especes');
 }
 
 function moSetPay(val) {
-  window._moPay = val;
-  var esp = document.getElementById('mo-pay-esp');
-  var card = document.getElementById('mo-pay-card');
-  if (esp) esp.style.background = val==='Especes' ? 'var(--red)' : '';
-  if (card) card.style.background = val==='Carte' ? 'var(--red)' : '';
+  _manualOrderData.payment = val;
+  renderManualOrderModal();
 }
 
-function updateManualTotal() {
-  var total = 0;
-  document.querySelectorAll('.mo-qty').forEach(function(inp){
-    total += (parseInt(inp.value)||0) * (parseFloat(inp.dataset.pprice)||0);
-  });
-  var el = document.getElementById('mo-total');
-  if (el) el.textContent = total.toFixed(2).replace('.',',')+'\u20ac';
+function moAddSimple(pid, pname, pprice, pcat) {
+  _manualOrderData.prenom = (document.getElementById('mo-prenom')||{}).value || _manualOrderData.prenom;
+  _manualOrderData.phone  = (document.getElementById('mo-phone')||{}).value  || _manualOrderData.phone;
+  _manualOrderData.slot   = (document.getElementById('mo-slot')||{}).value   || _manualOrderData.slot;
+  _manualCart.push({id:genId(), pid:pid, name:pname, price:pprice, cat:pcat, details:'', qty:1});
+  toast(pname+' ajouté','success',1500);
+  renderManualOrderModal();
+}
+
+function moRemoveItem(name) {
+  var idx = _manualCart.findIndex(function(i){ return i.name===name; });
+  if (idx>=0) _manualCart.splice(idx,1);
+  renderManualOrderModal();
+}
+
+function moConfigProduct(pid) {
+  _manualOrderData.prenom = (document.getElementById('mo-prenom')||{}).value || _manualOrderData.prenom;
+  _manualOrderData.phone  = (document.getElementById('mo-phone')||{}).value  || _manualOrderData.phone;
+  _manualOrderData.slot   = (document.getElementById('mo-slot')||{}).value   || _manualOrderData.slot;
+  // Ouvrir la modale de config produit — addToCart() détectera _manualOrderMode
+  continueOpenProduct(pid);
+}
+
+function moSetPay(val) {
+  _manualOrderData.payment = val;
+  renderManualOrderModal();
 }
 
 function submitManualOrder() {
-  var prenom = (document.getElementById('mo-prenom').value||'').trim();
-  var phone  = (document.getElementById('mo-phone').value||'').trim();
-  var slot   = (document.getElementById('mo-slot').value||'').trim();
-  var note   = (document.getElementById('mo-note').value||'').trim();
+  _manualOrderData.prenom = (document.getElementById('mo-prenom')||{}).value || _manualOrderData.prenom;
+  _manualOrderData.phone  = (document.getElementById('mo-phone')||{}).value  || _manualOrderData.phone;
+  _manualOrderData.slot   = (document.getElementById('mo-slot')||{}).value   || _manualOrderData.slot;
+  var prenom = _manualOrderData.prenom.trim();
+  var phone  = _manualOrderData.phone.trim();
+  var slot   = _manualOrderData.slot.trim();
   if (!prenom) { toast('Entrez le prénom du client','warning'); return; }
   if (!slot)   { toast('Choisissez un créneau','warning'); return; }
-  var items = [];
-  document.querySelectorAll('.mo-qty').forEach(function(inp){
-    var qty = parseInt(inp.value)||0;
-    if (qty<=0) return;
-    for (var q=0;q<qty;q++) {
-      items.push({id:genId(),pid:inp.dataset.pid,name:inp.dataset.pname,
-        price:parseFloat(inp.dataset.pprice)||0,cat:inp.dataset.pcat,
-        details:note,qty:1});
-    }
-  });
-  if (!items.length) { toast('Ajoutez au moins un produit','warning'); return; }
-  var cfg = getCfg();
+  if (!_manualCart.length) { toast('Ajoutez au moins un produit','warning'); return; }
+  var cfg    = getCfg();
   var orders = getOrders();
-  var num = String(orders.length+1).padStart(4,'0');
-  var today = new Date().toISOString().split('T')[0];
-  var total = items.reduce(function(s,i){return s+i.price;},0);
-  var order = {
+  var num    = String(orders.length+1).padStart(4,'0');
+  var today  = new Date().toISOString().split('T')[0];
+  var total  = _manualCart.reduce(function(s,i){return s+i.price;},0);
+  var order  = {
     id:genId(), orderNumber:num,
     userId:'guest-'+genId(), userPrenom:prenom, userPhone:phone,
-    items:items, total:total, originalTotal:total,
+    items:_manualCart.slice(), total:total, originalTotal:total,
     pickupDate:today, pickupTime:slot,
-    payment:window._moPay||'Especes',
+    payment:_manualOrderData.payment||'Especes',
     status:'confirmed', createdAt:new Date().toISOString(),
     pointsAwarded:false, manualEntry:true
   };
   saveOrder(order);
   db.ref('data/ba_orders/'+order.id).set(order);
+  _manualOrderMode = false;
+  _manualCart = [];
   closeModal('m-product');
   toast('Commande N°'+num+' créée !','success',3000);
   document.getElementById('admin-content').innerHTML = adminOrders();
@@ -2991,7 +3046,10 @@ function showManualOrderMsg(order, cfg) {
   var counts = {};
   order.items.forEach(function(i){ counts[i.name]=(counts[i.name]||0)+1; });
   var lines = Object.keys(counts).map(function(n){ return (counts[n]>1?counts[n]+'x ':'')+n; });
-  var noteStr = (order.items[0]&&order.items[0].details) ? '\n📝 Note : '+order.items[0].details : '';
+  // Détails spécifiques
+  var detailLines = [];
+  order.items.forEach(function(i){ if(i.details && detailLines.indexOf(i.details)<0) detailLines.push(i.details); });
+  var noteStr = detailLines.length ? '\n📝 '+detailLines.join(' | ') : '';
   var msg = '🌴 Break Antillais — Commande N°'+order.orderNumber+'\n\n'
     +'Bonjour '+order.userPrenom+' !\n'
     +'Votre commande a bien été enregistrée 🎉\n\n'
@@ -3009,7 +3067,7 @@ function showManualOrderMsg(order, cfg) {
     +'<div class="modal">'
     +'<div style="position:sticky;top:-1.4rem;z-index:20;background:var(--dark2);margin:-1.4rem -1.4rem .8rem;padding:.55rem 1rem .45rem;border-bottom:1px solid rgba(255,255,255,.08)">'
     +'<div style="font-weight:700;font-size:.95rem">✅ Commande N°'+order.orderNumber+' créée</div></div>'
-    +'<p class="text-sm text-muted mb-2">Partagez ce message avec le client — il reçoit son récap et le lien pour télécharger l\'app.</p>'
+    +'<p class="text-sm text-muted mb-2">Partagez ce message avec le client.</p>'
     +'<div style="background:var(--dark3);border-radius:var(--radius-sm);padding:.85rem;font-size:.8rem;line-height:1.7;white-space:pre-wrap;word-break:break-word;margin-bottom:1rem">'+safe+'</div>'
     +'<button class="btn btn-primary btn-full mb-1" data-msg="'+encodeURIComponent(msg)+'" onclick="shareManualMsg(this)">📤 Partager / WhatsApp</button>'
     +'<button class="btn btn-secondary btn-full" onclick="closeModal(&apos;m-product&apos;)">Fermer</button>'
