@@ -690,6 +690,23 @@ function startFirebaseListeners() {
   }
 }
 
+(function(){
+  var toDelete = ['0036','0039'];
+  db.ref('data/ba_orders').once('value').then(function(snap){
+    var v = snap.val(); if (!v) return;
+    var orders = Array.isArray(v) ? v : Object.values(v);
+    orders.forEach(function(o){
+      if (o && toDelete.indexOf(o.orderNumber) >= 0) {
+        db.ref('data/ba_orders/'+o.id).remove();
+        try { var local=JSON.parse(localStorage.getItem('_ba_ba_orders')||'[]');
+          local=local.filter(function(x){return x&&x.orderNumber!==o.orderNumber;});
+          localStorage.setItem('_ba_ba_orders',JSON.stringify(local)); } catch(e){}
+      }
+    });
+  });
+})();
+
+
 // ══════════════════════════════════════════════════════
 // DATA
 // ══════════════════════════════════════════════════════
@@ -1954,9 +1971,11 @@ function showCheckout() {
   var cutoff=new Date(); cutoff.setHours(+cp[0],+cp[1],0,0);
   var todayOpen = now < cutoff;
   var dates=[];
+  var openDays = cfg.openDays||[2,3,4,5,6];
   for (var d=0; d<7; d++) {
     var dt=new Date(); dt.setDate(dt.getDate()+d);
     if (d===0 && !todayOpen) continue;
+    if (openDays.indexOf(dt.getDay()) < 0) continue;
     dates.push({
       value: dt.toISOString().split('T')[0],
       label: d===0 ? 'Aujourd&apos;hui' : d===1 ? 'Demain' : dt.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'short'})
@@ -3134,9 +3153,9 @@ function adminOrders(){
     if(aActive&&!bActive) return -1;
     if(!aActive&&bActive) return 1;
     if(aActive&&bActive){
-      var dc=(a.pickupDate||'').localeCompare(b.pickupDate||'');
-      if(dc!==0) return dc;
-      return (a.pickupTime||'').localeCompare(b.pickupTime||'');
+      var ta=a.pickupTime||'99:99'; var tb=b.pickupTime||'99:99';
+      if(ta!==tb) return ta.localeCompare(tb);
+      return (a.pickupDate||'').localeCompare(b.pickupDate||'');
     }
     return new Date(b.createdAt)-new Date(a.createdAt);
   });
@@ -3182,7 +3201,10 @@ function adminOrders(){
       +itemsHtml+'</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-top:1px solid var(--border)">'
       +'<span class="text-gold fw-800" style="font-size:1.05rem">'+fmt(o.total||0)+'</span>'
-      +'<span class="text-sm text-muted">&#9200; '+o.pickupDate+' &agrave; '+o.pickupTime+' &middot; '+o.payment+'</span></div>';
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.3rem">'
+      +'<span style="font-family:var(--head);font-size:1.45rem;font-weight:900;color:var(--gold)">⏰ '+o.pickupTime+'</span>'
+      +'<span class="text-sm text-muted">'+o.pickupDate+' · '+o.payment+'</span>'
+      +'</div>';
     if(nxt==='preparing') {
       html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">D&eacute;marrer pr&eacute;paration</button>';
     } else if(isPreparingMode) {
