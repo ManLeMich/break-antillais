@@ -2717,26 +2717,62 @@ function renderProfile(){
   var _palList=load('ba_paliers',PALIERS);
   html += '<div class="sec-title" style="margin-top:1.25rem">Programme Fidelite</div>';
   _palList.forEach(function(p){
-    var active = palier.name===p.name;
-    var unlocked = pts>=(p.pts||p.min||0);
+    var pSeuil  = p.pts||p.min||0;
+    var active  = palier.name===p.name;
+    var unlocked= pts >= pSeuil;
     var hasReward = p.reward && p.name!=='Bronze';
-    html += '<div style="display:flex;align-items:center;gap:.75rem;padding:.85rem .9rem;'
-      +'background:'+(active?'rgba(200,35,43,.08)':'var(--dark3)')
-      +';border:1.5px solid '+(active?'var(--red)':unlocked&&hasReward?'rgba(45,158,95,.35)':'var(--border)')
-      +';border-radius:var(--radius-sm);margin-bottom:.45rem">'
-      +'<span style="font-size:1.5rem">'+p.icon+'</span>'
-      +'<div style="flex:1">'
-      +'<div class="fw-700" style="color:'+p.color+'">'+p.name+'</div>'
-      +(hasReward?'<div class="text-sm" style="color:'+(unlocked?'#2d9e5f':'var(--muted)')+'">🎁 '+p.reward+'</div>':'')
-      +'<div style="font-size:.72rem;color:var(--muted)">'+(unlocked?'✓ Atteint':'Debloque a '+p.min+' pts')+'</div>'
-      +'</div>'
-      +(unlocked && hasReward
-        ? '<button class="btn btn-primary btn-sm" data-palier="'+p.name+'" onclick="addRewardToCartByPalier(this.dataset.palier)" style="white-space:nowrap;padding:.4rem .75rem;font-size:.8rem">🎁 Choisir</button>'
-        : !unlocked
-          ? '<span style="font-size:.78rem;color:var(--muted);font-weight:600">'+Math.max(0,p.min-pts)+' pts</span>'
-          : '')
-      +'</div>';
+    var choices = p.choices||[];
+    var ptsManquants = Math.max(0, pSeuil - pts);
+
+    // Couleurs selon état
+    var borderColor = active ? 'var(--red)' : unlocked && hasReward ? 'rgba(45,158,95,.4)' : 'var(--border)';
+    var bgColor     = active ? 'rgba(200,35,43,.07)' : unlocked ? 'rgba(45,158,95,.04)' : 'var(--dark3)';
+
+    html += '<div style="border:1.5px solid '+borderColor+';background:'+bgColor+';border-radius:var(--radius-sm);margin-bottom:.5rem;overflow:hidden">';
+
+    // ── En-tête palier ──
+    html += '<div style="display:flex;align-items:center;gap:.65rem;padding:.75rem .9rem">';
+    html += '<span style="font-size:1.4rem'+(unlocked?'':';filter:grayscale(1);opacity:.5')+'">' + p.icon + '</span>';
+    html += '<div style="flex:1">';
+    html += '<div class="fw-700" style="color:' + (unlocked?p.color:'var(--muted)') + '">' + p.name + '</div>';
+    if (pSeuil > 0) {
+      html += '<div style="font-size:.72rem;color:var(--muted)">';
+      html += unlocked ? '<span style="color:#2d9e5f">✓ Débloqué</span>' : pSeuil + ' pts pour débloquer';
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:.72rem;color:#cd7f32">Palier de départ</div>';
+    }
+    html += '</div>';
+    // Badge pts manquants ou bouton choisir
+    if (unlocked && hasReward) {
+      html += '<button class="btn btn-primary btn-sm" data-palier="'+p.name+'" onclick="addRewardToCartByPalier(this.dataset.palier)" style="font-size:.78rem;padding:.35rem .7rem;white-space:nowrap">🎁 Utiliser</button>';
+    } else if (!unlocked && pSeuil > 0) {
+      html += '<span style="background:rgba(255,255,255,.07);border-radius:100px;padding:.2rem .6rem;font-size:.72rem;color:var(--muted);font-weight:700;white-space:nowrap">-' + ptsManquants + ' pts</span>';
+    }
+    html += '</div>';
+
+    // ── Produits disponibles ──
+    if (hasReward && choices.length) {
+      html += '<div style="padding:.0rem .9rem .75rem .9rem">';
+      html += '<div style="font-size:.72rem;color:var(--muted);margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em">Produits offerts :</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:.3rem">';
+      choices.forEach(function(ch){
+        if (unlocked) {
+          html += '<span style="background:rgba(45,158,95,.12);border:1px solid rgba(45,158,95,.3);color:#2d9e5f;border-radius:100px;font-size:.72rem;padding:.2rem .6rem">'+ch+'</span>';
+        } else {
+          html += '<span style="background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--muted);border-radius:100px;font-size:.72rem;padding:.2rem .6rem;filter:blur(0px)">'+ch+'</span>';
+        }
+      });
+      html += '</div>';
+      if (!unlocked) {
+        html += '<div style="font-size:.7rem;color:var(--muted);margin-top:.35rem;font-style:italic">Atteignez '+pSeuil+' pts pour débloquer ces récompenses.</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
   });
+
   html+='<div class="text-sm text-muted text-center mt-2 mb-3">1€ depense = '+(cfg.ptsPerEuro||10)+' points &bull; '+(cfg.signupPts||50)+' pts offerts a l&apos;inscription</div>';
   // Carte fidélité QR
   html += '<div class="sec-title" style="margin-top:1.25rem">🎫 Ma carte fidélité</div>'
