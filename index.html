@@ -3200,10 +3200,13 @@ function adminOrders(){
       +'<div style="background:var(--dark4);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;font-size:.82rem;line-height:1.6">'
       +itemsHtml+'</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-top:1px solid var(--border)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
       +'<span class="text-gold fw-800" style="font-size:1.05rem">'+fmt(o.total||0)+'</span>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.3rem">'
-      +'<span style="font-family:var(--head);font-size:1.05rem;font-weight:800;color:var(--gold)">⏰ '+o.pickupTime+'</span>'
-      +'<span class="text-sm text-muted">'+o.pickupDate+' · '+o.payment+'</span>'
+      +'<span class="text-sm text-muted">'+o.payment+'</span>'
+      +'</div>'
+      +'<div style="margin-top:.25rem;display:flex;align-items:center;gap:.5rem">'
+      +'<span style="font-family:var(--head);font-size:1.0rem;font-weight:800;color:var(--gold)">⏰ '+o.pickupTime+'</span>'
+      +'<span class="text-sm text-muted">'+o.pickupDate+'</span>'
       +'</div>';
     if(nxt==='preparing') {
       html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">D&eacute;marrer pr&eacute;paration</button>';
