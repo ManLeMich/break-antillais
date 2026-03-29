@@ -587,8 +587,8 @@ function startFirebaseListeners() {
             showOrderReadyAlert(newO);
           } else if (newO.status === 'confirmed' || newO.status === 'preparing') {
             var msgs = {
-              confirmed: '✅ Commande n°'+newO.orderNumber+' confirmee !',
-              preparing: '👨‍🍳 Votre commande n°'+newO.orderNumber+' est en preparation !'
+              confirmed: '✅ Commande confirmee !',
+              preparing: '👨‍🍳 Votre commande est en preparation !'
             };
             toast(msgs[newO.status]||'Statut mis a jour', 'info', 5000);
             sendPushNotif('Break Antillais', msgs[newO.status]||'Statut mis a jour');
@@ -2193,7 +2193,7 @@ function showOrderConfirm(order,cfg){
     +'<div style="text-align:center;font-size:3rem;margin-bottom:.5rem">🎉</div>'
     +'<h2 class="modal-title text-center">Commande confirmee !</h2>'
     +'<div class="card mb-2" style="background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.25)">'
-    +'<div class="fw-700 mb-1">Commande n°'+order.orderNumber+'</div>'
+    +'<div class="fw-700 mb-1">Commande confirmée !</div>'
     +'<div class="text-sm">'+order.items.map(function(i){return i.name;}).join(', ')+'</div>'
     +'<div class="divider"></div>'
     +'<div style="display:flex;justify-content:space-between"><span class="text-muted text-sm">Retrait</span><span class="fw-700">'+order.pickupTime+'</span></div>'
@@ -3281,13 +3281,13 @@ function advanceOrder(id){
       db.ref('data/users/'+u.id+'/points').set(u.points);
       // Save points history
       var hist = load('ba_pts_history_'+u.id, []);
-      var histLabel = 'Commande n°'+o.orderNumber+(bonus>0?' (+'+bonus+' pts bonus >'+bonusThreshold+'€)':'');
+      var histLabel = 'Commande'+(bonus>0?' (+'+bonus+' pts bonus >'+bonusThreshold+'€)':'');
       hist.unshift({pts:totalPts, label:histLabel, at:new Date().toISOString()});
       if(hist.length>50) hist=hist.slice(0,50);
       save('ba_pts_history_'+u.id, hist);
       saveUser(u);
       o.pointsAwarded=true;
-      var notifMsg = '+'+pts+' points'+(bonus>0?' + '+bonus+' pts bonus':'')+' pour votre commande n°'+o.orderNumber;
+      var notifMsg = '+'+pts+' points'+(bonus>0?' + '+bonus+' pts bonus':'')+'.';
       notify(o.userId,'🎁 Points ajoutes !', notifMsg);
       // Vérifier palier atteint
       db.ref('status_updates/'+o.userId+'/palier-check').set({status:'check_palier',at:new Date().toISOString()});
@@ -3296,10 +3296,10 @@ function advanceOrder(id){
   saveOrder(o);
   var titles={confirmed:'✅ Confirmee',preparing:'👨‍🍳 En preparation',ready:'🎉 Prete !',picked_up:'✅ Recuperee'};
   var bodies={
-    confirmed:'Votre commande n°'+o.orderNumber+' est confirmee. Retrait a '+o.pickupTime+'.',
-    preparing:'Votre commande n°'+o.orderNumber+' est en preparation.',
-    ready:'Votre commande n°'+o.orderNumber+' est prete ! Venez la recuperer.',
-    picked_up:'Commande n°'+o.orderNumber+' recuperee. Merci ! 🌴'
+    confirmed:'Votre commande est confirmee. Retrait a '+o.pickupTime+'.',
+    preparing:'Votre commande est en preparation.',
+    ready:'Votre commande est prete ! Venez la recuperer.',
+    picked_up:'Commande recuperee. Merci ! 🌴'
   };
   // Single notification channel - notify() handles Firebase + OneSignal
   notifyOrder(o.userId, titles[nxt], bodies[nxt], nxt, o.id, o.orderNumber, o.pickupTime);
@@ -3313,14 +3313,14 @@ function advanceOrder(id){
       db.ref('status_updates/'+o.userId+'/rating-'+o.id).set({
         status:'rate_order', orderId:o.id, orderNumber:o.orderNumber,
         title:'Comment etait votre commande ?',
-        body:'Donnez votre avis sur la commande N°'+o.orderNumber,
+        body:'Donnez votre avis sur votre derniere commande !',
         at:new Date().toISOString()
       });
     }, delayMs);
     // OneSignal push notification - scheduled 25 min later
     osSendPush(o.userId,
       '⭐ Comment etait votre commande ?',
-      'Donnez votre avis sur la commande N°'+o.orderNumber+' - ca nous aide beaucoup !',
+      'Donnez votre avis sur votre derniere commande - ca nous aide beaucoup !',
       delayMs
     );
   }
@@ -3328,6 +3328,7 @@ function advanceOrder(id){
 function cancelOrder(id){
   var o=getOrders().find(function(x){return x.id===id;});
   if(!o) return;
+  _manualOrderMode = false; // reset avant d'ouvrir la modale d'annulation
   var m = document.getElementById('m-product');
   m.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
     +'<div class="modal"><div class="modal-handle"></div>'
@@ -3348,7 +3349,8 @@ function doCancel(id){
   o.cancelReason = reason;
   o.cancelledAt = new Date().toISOString();
   saveOrder(o);
-  var msg = 'Votre commande n°'+o.orderNumber+' a ete annulee.'+(reason?' Raison: '+reason:'');
+  db.ref('data/ba_orders/'+o.id).update({status:'cancelled', cancelReason:reason, cancelledAt:o.cancelledAt});
+  var msg = 'Votre commande a ete annulee.'+(reason?' Raison: '+reason:'');
   notify(o.userId,'❌ Commande annulee', msg);
   closeModal('m-product');
   toast('Commande N°'+o.orderNumber+' annulee','info');
@@ -5239,7 +5241,7 @@ function showOrderReadyAlert(order) {
   // Browser notification if permitted
   if (window.Notification && Notification.permission === 'granted') {
     new Notification('🎉 Votre commande est prête !', {
-      body: 'Commande n°'+order.orderNumber+' — Venez la récupérer !',
+      body: 'Venez recuperer votre commande !',
       icon: ''
     });
   }
@@ -5250,7 +5252,7 @@ function showOrderReadyAlert(order) {
     +'<div style="font-size:5rem;margin-bottom:1rem;animation:pulse 1s ease-in-out infinite">🎉</div>'
     +'<div style="font-family:var(--head);font-size:2rem;font-weight:800;color:#fff;margin-bottom:.5rem">Votre commande</div>'
     +'<div style="font-family:var(--head);font-size:2rem;font-weight:800;color:var(--red);margin-bottom:.5rem">est prête !</div>'
-    +'<div style="font-size:1rem;color:rgba(255,255,255,.7);margin-bottom:2rem">Commande n°'+order.orderNumber+'<br>Venez la récupérer !</div>'
+    +'<div style="font-size:1rem;color:rgba(255,255,255,.7);margin-bottom:2rem">Votre commande est prête !<br>Venez la récupérer !</div>'
     +'<button class="btn btn-primary" style="font-size:1.1rem;padding:1rem 2.5rem" onclick="this.parentElement.parentElement.remove()">OK, j&apos;arrive ! 🏃</button>'
     +'</div>';
   document.body.appendChild(overlay);
@@ -5624,7 +5626,7 @@ function showRatingModal(orderId, orderNumber) {
     +'<div style="text-align:center;margin-bottom:1rem">'
     +'<div style="font-size:2.5rem">⭐</div>'
     +'<h2 class="modal-title">Votre avis compte !</h2>'
-    +'<p class="text-sm text-muted">Commande N°'+orderNumber+'</p>'
+    +'<p class="text-sm text-muted">Votre avis nous aide à progresser !</p>'
     +'</div>'
     +'<div style="display:flex;justify-content:center;gap:.75rem;margin:1rem 0" id="stars-wrap">';
   for(var i=1;i<=5;i++){
