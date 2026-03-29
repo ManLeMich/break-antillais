@@ -1172,17 +1172,11 @@ function doSendResetCode() {
   // Envoyer par email si disponible
   if (user.email && typeof emailjs !== 'undefined') {
     try {
-      emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+      emailjs.send(EMAILJS_SERVICE, 'template_gkowx1h', {
         email: user.email,
         client_name: user.prenom,
-        order_number: 'R\u00e9initialisation',
-        items: 'Votre code de r\u00e9initialisation : ' + code + '\n\nCe code expire dans 15 minutes.',
-        total: code,
-        pickup_date: 'Code valable 15 min',
-        pickup_time: '',
-        payment: '',
-        address: 'Break Antillais'
-      });
+        reset_code: code
+    });
       sent = true;
     } catch(e) {}
   }
