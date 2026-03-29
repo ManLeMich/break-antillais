@@ -608,7 +608,7 @@ function startFirebaseListeners() {
         added.forEach(function(o){
           playAdminAlert();
           showNewOrderBanner(o);
-          sendPushNotif('🆕 Nouvelle commande !', 'N°'+o.orderNumber+' — '+o.userPrenom+' — '+fmt(o.total));
+          sendPushNotif('🆕 Nouvelle commande !', 'N°'+o.orderNumber+' — '+o.userPrenom+' — '+fmt(o.total||0));
         });
       }
       _lastOrderCount = newPending.length;
@@ -960,7 +960,7 @@ function deleteProduct(id) {
   save('ba_products', saved);
 }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
-function fmt(p) { return (typeof p==='number' ? p.toFixed(2) : p).replace('.',',') + '€'; }
+function fmt(p) { var n = (typeof p==='number') ? p : parseFloat(p)||0; return n.toFixed(2).replace('.',',') + '€'; }
 function notifyOrder(userId, title, body, status, orderId, orderNumber, pickupTime) {
   // ONE notification via status_updates (in-app) + OneSignal (background)
   var notifId = genId();
@@ -1411,7 +1411,7 @@ function pcardHTML(p) {
     + '<div class="pcard-name">'+p.name+'</div>'
     + '<div class="pcard-desc">'+(p.desc||'')+'</div>'
     + allergenBadge
-    + (p.isClassique ? '<div class="pcard-price" style="font-size:.8rem;color:var(--muted)">Prix selon selection</div>' : '<div class="pcard-price">'+fmt(p.price)+'</div>')
+    + (p.isClassique ? '<div class="pcard-price" style="font-size:.8rem;color:var(--muted)">Prix selon selection</div>' : '<div class="pcard-price">'+fmt(p.price||0)+'</div>')
     + '</div>';
   return div.outerHTML;
 }
@@ -1593,7 +1593,7 @@ function continueOpenProduct(id) {
     +'</div>'
     +modalVisualHtml
     +'<h2 class="modal-title text-center">'+p.name+'</h2>'
-    +'<div style="text-align:center;font-family:var(--head);font-size:1.35rem;font-weight:800;color:var(--gold);margin-bottom:.4rem" id="modal-main-price">'+(p.isClassique?'—':fmt(p.price))+'</div>'
+    +'<div style="text-align:center;font-family:var(--head);font-size:1.35rem;font-weight:800;color:var(--gold);margin-bottom:.4rem" id="modal-main-price">'+(p.isClassique?'—':fmt(p.price||0))+'</div>'
     +'<p style="text-align:center;font-size:.8rem;color:var(--muted);margin-bottom:.9rem">'+(p.desc||'')+'</p>';
 
   if (isBox) {
@@ -1670,7 +1670,7 @@ function continueOpenProduct(id) {
     +'<input class="form-input" id="prod-note" placeholder="Ex: sans oignon, extra sauce..."/></div>'
 
     +'<div style="display:flex;align-items:center;gap:.75rem;margin-top:.75rem">'
-    +'<div style="font-family:var(--head);font-weight:800;font-size:1.2rem;color:var(--gold);background:var(--dark3);border:1.5px solid rgba(212,175,55,.25);border-radius:var(--radius-sm);padding:.65rem .9rem;white-space:nowrap" id="cart-btn-price">'+(p.isClassique?'—':fmt(p.price))+'</div>'
+    +'<div style="font-family:var(--head);font-weight:800;font-size:1.2rem;color:var(--gold);background:var(--dark3);border:1.5px solid rgba(212,175,55,.25);border-radius:var(--radius-sm);padding:.65rem .9rem;white-space:nowrap" id="cart-btn-price">'+(p.isClassique?'—':fmt(p.price||0))+'</div>'
     +'<div style="display:flex;align-items:center;gap:.5rem">'
     +'<button style="width:32px;height:32px;border-radius:50%;background:var(--dark4);border:1.5px solid var(--border);color:var(--text);font-size:1.2rem;cursor:pointer;flex-shrink:0" onclick="changeQty(-1)">−</button>'
     +'<span style="font-family:var(--head);font-weight:800;font-size:1.1rem;min-width:24px;text-align:center" id="prod-qty">1</span>'
@@ -1866,7 +1866,7 @@ function showUpsell(p) {
     html+='<div style="display:flex;align-items:center;gap:.85rem;padding:.75rem;background:var(--dark3);border-radius:var(--radius-sm);border:1px solid var(--border)">'
       +'<div style="font-size:1.8rem">'+(EMOJI[s.cat]||'🍽')+'</div>'
       +'<div style="flex:1"><div style="font-weight:700;font-size:.88rem">'+s.name+'</div>'
-      +'<div style="color:var(--gold);font-family:var(--head);font-weight:800">'+fmt(s.price)+'</div></div>'
+      +'<div style="color:var(--gold);font-family:var(--head);font-weight:800">'+fmt(s.price||0)+'</div></div>'
       +'<button class="btn btn-primary btn-sm" data-sid="'+s.id+'" onclick="quickAdd(this.dataset.sid)">+</button></div>';
   });
   html+='</div><button class="btn btn-secondary btn-full mt-2" onclick="closeModal(&apos;m-product&apos;)">Non merci</button></div></div>';
@@ -1906,7 +1906,7 @@ function renderCart() {
       +'<div style="flex:1"><div class="cart-item-name">'+item.name+'</div>'
       +(item.details?'<div class="cart-item-detail">'+item.details+'</div>':'')
       +'</div><div style="display:flex;align-items:center;gap:.65rem">'
-      +'<span class="cart-item-price" style="'+(isReward?'color:#2d9e5f':'')+'">'+( isReward?'Offert':fmt(item.price))+'</span>'
+      +'<span class="cart-item-price" style="'+(isReward?'color:#2d9e5f':'')+'">'+( isReward?'Offert':fmt(item.price||0))+'</span>'
       +(!isReward?'<button style="width:26px;height:26px;border-radius:50%;background:rgba(212,175,55,.15);border:none;color:var(--gold);cursor:pointer;font-size:.75rem" data-cid="'+item.id+'" onclick="editCartItem(this.dataset.cid)">✏️</button>':'')
       +'<button style="width:26px;height:26px;border-radius:50%;background:rgba(200,35,43,.15);border:none;color:var(--red);cursor:pointer" data-cid="'+item.id+'" onclick="removeFromCart(this.dataset.cid)">✕</button>'
       +'</div></div>';
@@ -2206,8 +2206,8 @@ function showOrderConfirm(order,cfg){
     +'<div class="text-sm">'+(order.items||[]).map(function(i){return i.name;}).join(', ')+'</div>'
     +'<div class="divider"></div>'
     +'<div style="display:flex;justify-content:space-between"><span class="text-muted text-sm">Retrait</span><span class="fw-700">'+order.pickupTime+'</span></div>'
-    +(order.discountLabel?'<div style="display:flex;justify-content:space-between;margin-top:.25rem"><span class="text-muted text-sm">Reduction points</span><span class="fw-700 text-red">-'+fmt(order.originalTotal-order.total)+'</span></div>':'')
-    +'<div style="display:flex;justify-content:space-between;margin-top:.25rem"><span class="text-muted text-sm">Total</span><span class="fw-700 text-gold">'+fmt(order.total)+'</span></div>'
+    +(order.discountLabel?'<div style="display:flex;justify-content:space-between;margin-top:.25rem"><span class="text-muted text-sm">Reduction points</span><span class="fw-700 text-red">-'+fmt((order.originalTotal||0)-(order.total||0))+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;margin-top:.25rem"><span class="text-muted text-sm">Total</span><span class="fw-700 text-gold">'+fmt(order.total||0)+'</span></div>'
     +'<div style="display:flex;justify-content:space-between;margin-top:.25rem"><span class="text-muted text-sm">Reglement</span><span class="fw-700">'+order.payment+'</span></div>'
     +'</div>'
     +'<div style="background:rgba(22,101,52,.1);border:1px solid rgba(22,101,52,.25);border-radius:var(--radius);padding:.7rem 1rem;margin-bottom:.75rem;font-size:.82rem">'
@@ -2242,7 +2242,7 @@ function renderOrders(){
   }
   if(done.length>0){
     html+='<div class="sec-title" style="margin-top:1.5rem">Historique ('+done.length+')</div>';
-    done.forEach(function(o){html+=orderCard(o);});
+    done.forEach(function(o){ if (o && o.id) html+=orderCard(o); });
   }
   if(orders.length===0){
     html+='<div class="empty-state" style="padding:2.5rem 0"><div class="icon">📭</div><div class="title">Aucune commande</div><p class="text-sm">Passez votre premiere commande !</p></div>';
@@ -2280,7 +2280,7 @@ function orderCard(o){
       var dot = s==='done'?'<span style="color:#10b981">✓</span>':o.status==='picked_up'?'<span style="color:#6b7280">✓</span>':o.status==='preparing'&&idx===0&&!s?'<span style="color:#3b82f6">~</span>':'<span style="color:#6b7280">○</span>';
       return '<div style="font-size:.82rem;padding:.15rem 0">'+dot+' '+it.name+'</div>';
     }).join('')+'</div>'
-    +'<div class="text-sm fw-700 text-gold">'+fmt(o.total)+' · '+o.payment+'</div>'
+    +'<div class="text-sm fw-700 text-gold">'+fmt(o.total||0)+' · '+o.payment+'</div>'
     +'<div class="text-sm mt-1">⏰ Retrait a '+o.pickupTime+'</div>';
   if(cur>=0){
     html+='<div style="display:flex;margin-top:.85rem;overflow-x:auto">';
@@ -2801,7 +2801,7 @@ function exportWhatsApp() {
     slotOrders.forEach(function(o){
       lines.push((st[o.status]||'?')+' N'+o.orderNumber+' - '+o.userPrenom);
       (o.items||[]).forEach(function(i){ lines.push('  > '+i.name+(i.details?' ('+i.details.split('|')[0]+')':'')); });
-      lines.push('  '+fmt(o.total)+' - '+o.payment);
+      lines.push('  '+fmt(o.total||0)+' - '+o.payment);
     });
   });
   lines.push('');
@@ -3179,7 +3179,7 @@ function adminOrders(){
       +'<div style="background:var(--dark4);border-radius:8px;padding:.6rem .75rem;margin-bottom:.5rem;font-size:.82rem;line-height:1.6">'
       +itemsHtml+'</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-top:1px solid var(--border)">'
-      +'<span class="text-gold fw-800" style="font-size:1.05rem">'+fmt(o.total)+'</span>'
+      +'<span class="text-gold fw-800" style="font-size:1.05rem">'+fmt(o.total||0)+'</span>'
       +'<span class="text-sm text-muted">&#9200; '+o.pickupDate+' &agrave; '+o.pickupTime+' &middot; '+o.payment+'</span></div>';
     if(nxt==='preparing') {
       html+='<button class="btn btn-primary btn-sm btn-full mt-1" data-oid="'+o.id+'" onclick="advanceOrder(this.dataset.oid)">D&eacute;marrer pr&eacute;paration</button>';
@@ -3343,7 +3343,7 @@ function cancelOrder(id){
   m.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
     +'<div class="modal"><div class="modal-handle"></div>'
     +'<h2 class="modal-title">Annuler la commande N°'+o.orderNumber+' ?</h2>'
-    +'<p class="text-sm text-muted mb-2">Client : '+o.userPrenom+' — '+fmt(o.total)+'</p>'
+    +'<p class="text-sm text-muted mb-2">Client : '+o.userPrenom+' — '+fmt(o.total||0)+'</p>'
     +'<div class="form-group"><label class="form-label">Raison (optionnel)</label>'
     +'<input class="form-input" id="cancel-reason" placeholder="Ex: client absent, rupture stock..."/></div>'
     +'<button class="btn btn-danger btn-full mt-2" data-oid="'+id+'" onclick="doCancel(this.dataset.oid)">Confirmer annulation</button>'
@@ -3377,7 +3377,7 @@ function adminProducts(){
     html+='<div class="card mb-1" style="display:flex;align-items:center;gap:.75rem">'
       +(p.image?'<img src="'+p.image+'" style="width:46px;height:46px;object-fit:cover;border-radius:8px">'
                :'<div style="font-size:1.8rem;width:46px;text-align:center">'+(EMOJI[p.cat]||'🍽')+'</div>')
-      +'<div style="flex:1"><div class="fw-700 text-sm">'+p.name+'</div><div class="text-sm text-gold">'+fmt(p.price)+'</div>'
+      +'<div style="flex:1"><div class="fw-700 text-sm">'+p.name+'</div><div class="text-sm text-gold">'+fmt(p.price||0)+'</div>'
       +(p.soon?'<div style="font-size:.68rem;color:var(--red)">Prochainement</div>':'')+'</div>'
       +'<div style="display:flex;flex-direction:column;gap:.3rem;align-items:flex-end">'
       +'<label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.75rem">'
@@ -4887,7 +4887,7 @@ function adminInvoices(sortBy){
     html+='<div class="card mb-1" style="display:flex;justify-content:space-between;align-items:center">'
       +'<div><div class="fw-700 text-sm">N°'+o.orderNumber+'</div>'
       +'<div class="text-sm text-muted">'+new Date(o.createdAt).toLocaleDateString('fr-FR')+' · '+o.userPrenom+'</div>'
-      +'<div class="text-sm text-gold">'+fmt(o.total)+'</div></div>'
+      +'<div class="text-sm text-gold">'+fmt(o.total||0)+'</div></div>'
       +'<button class="btn btn-secondary btn-sm" data-oid="'+o.id+'" onclick="viewInvoice(this.dataset.oid)">Voir</button></div>';
   });
   // Avis clients
@@ -4925,9 +4925,9 @@ function viewInvoice(id){
     +'<div style="display:flex;justify-content:space-between;margin-bottom:.2rem"><span class="text-sm text-muted">Retrait</span><span class="text-sm">'+o.pickupTime+'</span></div>'
     +'<div class="divider"></div>'
     +'<table style="width:100%;font-size:.82rem">'
-    +(o.items||[]).map(function(i){return '<tr><td>'+i.name+(i.details?' ('+i.details+')':'')+'</td><td style="text-align:right">'+fmt(i.price)+'</td></tr>';}).join('')
+    +(o.items||[]).map(function(i){return '<tr><td>'+i.name+(i.details?' ('+i.details+')':'')+'</td><td style="text-align:right">'+fmt(i.price||0)+'</td></tr>';}).join('')
     +'</table><div class="divider"></div>'
-    +'<div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span class="text-gold">'+fmt(o.total)+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span class="text-gold">'+fmt(o.total||0)+'</span></div>'
     +'<div class="text-sm text-muted mt-1">'+o.payment+'</div></div>'
     +'<button class="btn btn-secondary btn-full mt-2" onclick="closeModal(&apos;m-product&apos;)">Fermer</button></div></div>';
   var m=document.getElementById('m-product');
@@ -5157,7 +5157,7 @@ function showNewOrderBanner(order) {
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(135deg,#166534,#15803d);color:#fff;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;animation:slideDown .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.5)';
   banner.innerHTML = '<div>'
     +'<div style="font-family:var(--head);font-weight:800;font-size:1.05rem">🆕 Nouvelle commande !</div>'
-    +'<div style="font-size:.85rem;opacity:.9">N°'+order.orderNumber+' — '+order.userPrenom+' — '+fmt(order.total)+'</div>'
+    +'<div style="font-size:.85rem;opacity:.9">N°'+order.orderNumber+' — '+order.userPrenom+' — '+fmt(order.total||0)+'</div>'
     +'</div>'
     +'<div style="display:flex;gap:.5rem">'
     +'<button style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:.45rem .9rem;border-radius:8px;cursor:pointer;font-weight:700;font-size:.85rem" onclick="document.getElementById(&quot;new-order-banner&quot;).remove();go(&quot;profile&quot;)">'
@@ -5185,7 +5185,7 @@ function startOrderPolling() {
         newOrders.forEach(function(o){
           playAdminAlert();
           showNewOrderBanner(o);
-          sendPushNotif('🆕 Nouvelle commande !', 'N°'+o.orderNumber+' — '+o.userPrenom+' — '+fmt(o.total));
+          sendPushNotif('🆕 Nouvelle commande !', 'N°'+o.orderNumber+' — '+o.userPrenom+' — '+fmt(o.total||0));
         });
       }
       _lastOrderCount = pendingOrders.length;
