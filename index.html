@@ -3271,41 +3271,67 @@ function launchConfetti(duration) {
 
 function advanceOrder(id){
   var next={pending:'confirmed',confirmed:'preparing',preparing:'ready',ready:'picked_up'};
+  // Chercher la commande d'abord en localStorage, sinon dans Firebase
   var orders=getOrders();
   var o=orders.find(function(x){return x.id===id;});
-  if(!o) return;
+  if(!o){
+    // Commande pas en localStorage — essayer Firebase directement
+    db.ref('data/ba_orders/'+id).once('value').then(function(snap){
+      var fo = snap.val();
+      if (fo) { advanceOrderObj(fo); }
+      else { toast('Commande introuvable','error'); }
+    });
+    return;
+  }
+  advanceOrderObj(o);
+}
+
+function advanceOrderObj(o){
+  var next={pending:'confirmed',confirmed:'preparing',preparing:'ready',ready:'picked_up'};
   var nxt=next[o.status]; if(!nxt) return;
   o.status=nxt;
+  o.updatedAt=new Date().toISOString();
+
   if(nxt==='picked_up'&&!o.pointsAwarded){
     var users=getUsers();
     var u=users.find(function(x){return x.id===o.userId;});
     if(u){
       var cfg=getCfg();
-      var pts=Math.floor(o.total)*(cfg.ptsPerEuro||10);
-      // Bonus 5pts for orders over 20€
-      var cfg3 = getCfg();
-      var bonusThreshold = cfg3.bonusOrderThreshold || 20;
-      var bonusPts = cfg3.bonusOrderPts || 5;
-      var bonus = o.total >= bonusThreshold ? bonusPts : 0;
-      var totalPts = pts + bonus;
+      var pts=Math.floor(o.total||0)*(cfg.ptsPerEuro||10);
+      var bonusThreshold=cfg.bonusOrderThreshold||20;
+      var bonusPts=cfg.bonusOrderPts||5;
+      var bonus=(o.total||0)>=bonusThreshold?bonusPts:0;
+      var totalPts=pts+bonus;
       u.points=(u.points||0)+totalPts;
       db.ref('data/users/'+u.id+'/points').set(u.points);
-      // Save points history
-      var hist = load('ba_pts_history_'+u.id, []);
-      var histLabel = 'Commande'+(bonus>0?' (+'+bonus+' pts bonus >'+bonusThreshold+'€)':'');
-      hist.unshift({pts:totalPts, label:histLabel, at:new Date().toISOString()});
+      var hist=load('ba_pts_history_'+u.id,[]);
+      var histLabel='Commande'+(bonus>0?' (+'+bonus+' pts bonus >'+bonusThreshold+'€)':'');
+      hist.unshift({pts:totalPts,label:histLabel,at:new Date().toISOString()});
       if(hist.length>50) hist=hist.slice(0,50);
-      save('ba_pts_history_'+u.id, hist);
+      save('ba_pts_history_'+u.id,hist);
       saveUser(u);
       o.pointsAwarded=true;
-      var notifMsg = '+'+pts+' points'+(bonus>0?' + '+bonus+' pts bonus':'')+'.';
-      notify(o.userId,'🎁 Points ajoutes !', notifMsg);
-      // Vérifier palier atteint
+      var notifMsg='+'+pts+' points'+(bonus>0?' + '+bonus+' pts bonus':'')+'.';
+      notify(o.userId,'🎁 Points ajoutes !',notifMsg);
       db.ref('status_updates/'+o.userId+'/palier-check').set({status:'check_palier',at:new Date().toISOString()});
     }
   }
+
+  // Écrire la commande COMPLÈTE dans Firebase (set, pas update)
+  // Cela garantit qu'elle existe dans Firebase même si elle n'y était pas
+  db.ref('data/ba_orders/'+o.id).set(o).then(function(){
+    // Firebase a confirmé l'écriture — le listener va mettre à jour l'UI automatiquement
+    toast('Statut mis a jour','success');
+  }).catch(function(e){
+    toast('Erreur Firebase: '+e.message,'error');
+  });
+
+  // Mettre à jour le localStorage immédiatement (ne pas attendre Firebase)
   saveOrder(o);
-  db.ref('data/ba_orders/'+o.id).update({status:nxt, pointsAwarded:o.pointsAwarded});
+
+  // Recharger l'UI immédiatement
+  document.getElementById('admin-content').innerHTML=adminOrders();
+
   var titles={confirmed:'✅ Confirmee',preparing:'👨‍🍳 En preparation',ready:'🎉 Prete !',picked_up:'✅ Recuperee'};
   var bodies={
     confirmed:'Votre commande est confirmee. Retrait a '+o.pickupTime+'.',
@@ -3313,34 +3339,40 @@ function advanceOrder(id){
     ready:'Votre commande est prete ! Venez la recuperer.',
     picked_up:'Commande recuperee. Merci ! 🌴'
   };
-  // Single notification channel - notify() handles Firebase + OneSignal
-  notifyOrder(o.userId, titles[nxt], bodies[nxt], nxt, o.id, o.orderNumber, o.pickupTime);
-  toast('Statut mis a jour','success');
-  document.getElementById('admin-content').innerHTML=adminOrders();
-  // Prompt rating when order is picked up - 25 min delay
-  if(nxt==='picked_up') {
-    var delayMs = 25 * 60 * 1000; // 25 minutes
+  notifyOrder(o.userId,titles[nxt],bodies[nxt],nxt,o.id,o.orderNumber,o.pickupTime);
+
+  if(nxt==='picked_up'){
+    var delayMs=25*60*1000;
     setTimeout(function(){
-      // In-app notification if app is open
       db.ref('status_updates/'+o.userId+'/rating-'+o.id).set({
-        status:'rate_order', orderId:o.id, orderNumber:o.orderNumber,
+        status:'rate_order',orderId:o.id,orderNumber:o.orderNumber,
         title:'Comment etait votre commande ?',
         body:'Donnez votre avis sur votre derniere commande !',
         at:new Date().toISOString()
       });
-    }, delayMs);
-    // OneSignal push notification - scheduled 25 min later
-    osSendPush(o.userId,
-      '⭐ Comment etait votre commande ?',
-      'Donnez votre avis sur votre derniere commande - ca nous aide beaucoup !',
-      delayMs
-    );
+    },delayMs);
+    osSendPush(o.userId,'⭐ Comment etait votre commande ?',
+      'Donnez votre avis sur votre derniere commande - ca nous aide beaucoup !',delayMs);
   }
 }
+
 function cancelOrder(id){
-  var o=getOrders().find(function(x){return x.id===id;});
-  if(!o) return;
-  _manualOrderMode = false; // reset avant d'ouvrir la modale d'annulation
+  _manualOrderMode = false;
+  // Chercher la commande en localStorage d'abord
+  var o = getOrders().find(function(x){ return x.id===id; });
+  if (!o) {
+    // Pas en localStorage — chercher dans Firebase
+    db.ref('data/ba_orders/'+id).once('value').then(function(snap){
+      var fo = snap.val();
+      if (fo) { _showCancelModal(fo); }
+      else { toast('Commande introuvable', 'error'); }
+    });
+    return;
+  }
+  _showCancelModal(o);
+}
+
+function _showCancelModal(o){
   var m = document.getElementById('m-product');
   m.innerHTML='<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
     +'<div class="modal"><div class="modal-handle"></div>'
@@ -3348,26 +3380,41 @@ function cancelOrder(id){
     +'<p class="text-sm text-muted mb-2">Client : '+o.userPrenom+' — '+fmt(o.total||0)+'</p>'
     +'<div class="form-group"><label class="form-label">Raison (optionnel)</label>'
     +'<input class="form-input" id="cancel-reason" placeholder="Ex: client absent, rupture stock..."/></div>'
-    +'<button class="btn btn-danger btn-full mt-2" data-oid="'+id+'" onclick="doCancel(this.dataset.oid)">Confirmer annulation</button>'
+    +'<button class="btn btn-danger btn-full mt-2" data-oid="'+o.id+'" onclick="doCancel(this.dataset.oid)">Confirmer annulation</button>'
     +'<button class="btn btn-secondary btn-full mt-1" onclick="closeModal(&apos;m-product&apos;)">Retour</button>'
     +'</div></div>';
   m.style.display='block';
 }
+
 function doCancel(id){
   var o=getOrders().find(function(x){return x.id===id;});
-  if(!o) return;
-  var reason = (document.getElementById('cancel-reason')||{}).value||'';
+  if(!o){
+    // Chercher dans Firebase
+    db.ref('data/ba_orders/'+id).once('value').then(function(snap){
+      var fo=snap.val();
+      if(fo){ _doCancelObj(fo); }
+      else { toast('Commande introuvable','error'); }
+    });
+    return;
+  }
+  _doCancelObj(o);
+}
+
+function _doCancelObj(o){
+  var reason=(document.getElementById('cancel-reason')||{}).value||'';
   o.status='cancelled';
-  o.cancelReason = reason;
-  o.cancelledAt = new Date().toISOString();
+  o.cancelReason=reason;
+  o.cancelledAt=new Date().toISOString();
   saveOrder(o);
-  db.ref('data/ba_orders/'+o.id).update({status:'cancelled', cancelReason:reason, cancelledAt:o.cancelledAt});
-  var msg = 'Votre commande a ete annulee.'+(reason?' Raison: '+reason:'');
-  notify(o.userId,'❌ Commande annulee', msg);
+  // Écrire la commande complète dans Firebase
+  db.ref('data/ba_orders/'+o.id).set(o);
+  var msg='Votre commande a ete annulee.'+(reason?' Raison: '+reason:'');
+  notify(o.userId,'❌ Commande annulee',msg);
   closeModal('m-product');
   toast('Commande N°'+o.orderNumber+' annulee','info');
   document.getElementById('admin-content').innerHTML=adminOrders();
 }
+
 function adminProducts(){
   var prods=getProducts();
   prods.sort(function(a,b){ return a.name.localeCompare(b.name,'fr'); });
