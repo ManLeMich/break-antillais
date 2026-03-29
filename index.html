@@ -507,7 +507,16 @@ var EMAILJS_KEY = 'LLbn9BnRqyy4NjYAW';
 try { emailjs.init(EMAILJS_KEY); } catch(e) { console.log('EmailJS not available:', e); }
 
 function load(key, def) {
-  try { var v = localStorage.getItem('_ba_'+key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
+  try {
+    var v = localStorage.getItem('_ba_'+key);
+    if (!v) return def;
+    var parsed = JSON.parse(v);
+    // Si on attend un tableau (def=[]) mais Firebase a sauvegardé un objet, convertir
+    if (Array.isArray(def) && parsed !== null && !Array.isArray(parsed) && typeof parsed === 'object') {
+      return Object.values(parsed).filter(function(x){ return x && typeof x === 'object'; });
+    }
+    return parsed;
+  } catch(e) { return def; }
 }
 function save(key, val) {
   try { localStorage.setItem('_ba_'+key, JSON.stringify(val)); } catch(e) {}
@@ -564,7 +573,8 @@ function startFirebaseListeners() {
     if (v === null) return;
     var newOrders = Array.isArray(v) ? v : Object.values(v);
     var oldOrdersStr = localStorage.getItem('_ba_ba_orders');
-    var oldOrders = oldOrdersStr ? JSON.parse(oldOrdersStr) : [];
+    var _oldRaw = oldOrdersStr ? JSON.parse(oldOrdersStr) : [];
+    var oldOrders = Array.isArray(_oldRaw) ? _oldRaw : Object.values(_oldRaw || {}).filter(function(x){ return x && typeof x === 'object'; });
 
     // Detect status changes for current client
     if (user && !isAdmin) {
@@ -813,8 +823,19 @@ var _newImg = null;
 
 // load/save defined above with Firebase
 
-function getUsers()    { return load('ba_users', []); }
-function getOrders()   { return load('ba_orders', []); }
+function getUsers() {
+  var v = load('ba_users', []);
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  return Object.values(v).filter(function(x){ return x && typeof x === 'object'; });
+}
+function getOrders() {
+  var v = load('ba_orders', []);
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  // Firebase peut retourner un objet au lieu d'un tableau
+  return Object.values(v).filter(function(x){ return x && typeof x === 'object'; });
+}
 function getProducts() {
   var deleted = load('ba_deleted_products', []);
   var saved = load('ba_products', null);
