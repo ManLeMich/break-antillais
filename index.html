@@ -695,38 +695,23 @@ function startFirebaseListeners() {
   }
 }
 
-// Suppression forcée commandes 0036 et 0039
+
+// Remise à zéro totale des commandes de test
 (function(){
-  var toDelete = ['0036','0039'];
-  function _purgeOrders() {
-    // 1. Purger le localStorage
-    try {
-      var local = JSON.parse(localStorage.getItem('_ba_ba_orders')||'[]');
-      var before = local.length;
-      local = local.filter(function(x){ return x && toDelete.indexOf(x.orderNumber) < 0; });
-      if (local.length !== before) localStorage.setItem('_ba_ba_orders', JSON.stringify(local));
-    } catch(e){}
-    // 2. Purger Firebase
-    db.ref('data/ba_orders').once('value').then(function(snap){
-      var v = snap.val(); if (!v) return;
-      var orders = Array.isArray(v) ? v : Object.values(v);
-      orders.forEach(function(o){
-        if (o && toDelete.indexOf(o.orderNumber) >= 0) {
-          db.ref('data/ba_orders/'+o.id).remove();
-          console.log('[BA] Supprimé:', o.orderNumber);
-        }
-      });
-    });
-  }
-  // Exécuter immédiatement
-  _purgeOrders();
-  // Réessayer toutes les 3s pendant 60s (au cas où Firebase tarde)
-  var _purgeCount = 0;
-  var _purgeInterval = setInterval(function(){
-    _purgeOrders();
-    _purgeCount++;
-    if (_purgeCount >= 20) clearInterval(_purgeInterval);
-  }, 3000);
+  var confirmed = false;
+  // Purger Firebase
+  db.ref('data/ba_orders').once('value').then(function(snap){
+    var v = snap.val(); if (!v) return;
+    var refs = Object.keys(v);
+    refs.forEach(function(k){ db.ref('data/ba_orders/'+k).remove(); });
+    console.log('[BA] '+refs.length+' commandes supprimées de Firebase');
+  });
+  // Purger localStorage
+  try {
+    localStorage.removeItem('_ba_ba_orders');
+    localStorage.removeItem('_ba_ba_last_save');
+    console.log('[BA] Commandes localStorage purgées');
+  } catch(e){}
 })();
 
 
@@ -1510,9 +1495,9 @@ function renderHome() {
       var nd = new Date(); nd.setDate(nd.getDate()+d);
       if (openDays.indexOf(nd.getDay())>=0) { nextWorkDay=nd; break; }
     }
-    html += '<div style="width:100%;text-align:center;font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600">📅 Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
+    html += '<div style="display:block;width:100%;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem .9rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 0">Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
   } else if (todayClosed) {
-    html += '<div style="width:100%;text-align:center;font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600">📅 Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
+    html += '<div style="display:block;width:100%;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem .9rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 0">Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
   }
   // Upcoming closure banner (only if within next 7 days and it's a working day)
   if (upcomingClosure) {
@@ -3323,7 +3308,7 @@ function submitManualOrder() {
   _manualOrderMode = false;
   _manualCart = [];
   closeModal('m-product');
-  toast('Commande N°'+num+' créée !','success',3000);
+  toast('Commande confirmée ! 🌴','success',3000);
   document.getElementById('admin-content').innerHTML = adminOrders();
   showManualOrderMsg(order, cfg);
 }
@@ -3886,55 +3871,73 @@ function deleteProd(id){
   toast('Produit supprime','info');
   document.getElementById('admin-content').innerHTML=adminProducts();
 }
-function adminStats(period){
+
+function adminStats(period, dateFrom, dateTo){
   period = period||'all';
   var allOrders = getOrders();
   var now = new Date();
+
+  // Filtrer par période
   var filtered = allOrders.filter(function(o){
     if(o.status==='cancelled') return false;
-    if(period==='week'){var d=new Date(o.createdAt);return (now-d)<7*86400000;}
-    if(period==='month'){var d=new Date(o.createdAt);return (now-d)<30*86400000;}
+    var d = new Date(o.createdAt);
+    if(period==='week')  return (now-d)<7*86400000;
+    if(period==='month') return (now-d)<30*86400000;
+    if(period==='custom' && dateFrom && dateTo){
+      var from = new Date(dateFrom+'T00:00:00');
+      var to   = new Date(dateTo+'T23:59:59');
+      return d>=from && d<=to;
+    }
     return true;
   });
-  var done = filtered.filter(function(o){return o.status==='picked_up';});
-  var revenue = done.reduce(function(s,o){return s+o.total;},0);
-  var avg = done.length?revenue/done.length:0;
+
+  var done    = filtered.filter(function(o){return o.status==='picked_up';});
+  var revenue = done.reduce(function(s,o){return s+(o.total||0);},0);
+  var avg     = done.length ? revenue/done.length : 0;
   var clients = getUsers().filter(function(u){var r=u.role||'client';return r==='client'||r==='';});
 
-  // Revenue by day of week
-  var byDay = [0,0,0,0,0,0,0];
-  var byDayCount = [0,0,0,0,0,0,0];
+  // CA par jour de semaine
+  var byDay=[0,0,0,0,0,0,0], byDayCount=[0,0,0,0,0,0,0];
   done.forEach(function(o){
-    var d = new Date(o.createdAt).getDay();
-    byDay[d] += o.total;
-    byDayCount[d]++;
+    var d=new Date(o.createdAt).getDay();
+    byDay[d]+=(o.total||0); byDayCount[d]++;
   });
-  var dayNames = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-  var maxDay = Math.max.apply(null, byDay) || 1;
+  var dayNames=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  var maxDay=Math.max.apply(null,byDay)||1;
 
-  // Revenue by hour (affluence)
-  var byHour = {};
-  allOrders.filter(function(o){return o.status!=='cancelled';}).forEach(function(o){
-    var h = o.pickupTime ? o.pickupTime.split(':')[0] : null;
-    if(h) byHour[h] = (byHour[h]||0)+1;
+  // Affluence par heure
+  var byHour={};
+  filtered.forEach(function(o){
+    var h=o.pickupTime?o.pickupTime.split(':')[0]:null;
+    if(h) byHour[h]=(byHour[h]||0)+1;
   });
-  var maxHour = Math.max.apply(null, Object.values(byHour).concat([1]));
+  var maxHour=Math.max.apply(null,Object.values(byHour).concat([1]));
 
-  // Top products
+  // Top produits
   var freq={};
   done.forEach(function(o){(o.items||[]).forEach(function(i){if(i.cat!=='reward') freq[i.name]=(freq[i.name]||0)+1;});});
   var top=Object.entries(freq).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
 
-  var html='<div style="padding:0 .9rem">';
+  var html='<div style="padding:0 .9rem 5rem">';
 
-  // Period selector
-  html+='<div style="display:flex;gap:.35rem;margin:.75rem 0;flex-wrap:wrap">'
+  // ── Sélecteur de période ──
+  var customStyle = 'display:'+(period==='custom'?'flex':'none')+';gap:.4rem;margin-top:.4rem;align-items:center;flex-wrap:wrap';
+  html+='<div style="margin:.75rem 0">'
+    +'<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.3rem">'
     +'<button class="btn btn-sm '+(period==='all'?'btn-primary':'btn-secondary')+'" onclick="document.getElementById(&apos;admin-content&apos;).innerHTML=adminStats(&apos;all&apos;)">Tout</button>'
     +'<button class="btn btn-sm '+(period==='month'?'btn-primary':'btn-secondary')+'" onclick="document.getElementById(&apos;admin-content&apos;).innerHTML=adminStats(&apos;month&apos;)">30 jours</button>'
     +'<button class="btn btn-sm '+(period==='week'?'btn-primary':'btn-secondary')+'" onclick="document.getElementById(&apos;admin-content&apos;).innerHTML=adminStats(&apos;week&apos;)">7 jours</button>'
+    +'<button class="btn btn-sm '+(period==='custom'?'btn-primary':'btn-secondary')+'" onclick="toggleStatsCustom()">📅 Période</button>'
+    +'</div>'
+    +'<div id="stats-custom-range" style="'+customStyle+'">'
+    +'<input type="date" id="stats-from" class="form-input" style="flex:1;padding:.3rem .5rem;font-size:.8rem" value="'+(dateFrom||'')+'">'
+    +'<span class="text-sm text-muted">→</span>'
+    +'<input type="date" id="stats-to" class="form-input" style="flex:1;padding:.3rem .5rem;font-size:.8rem" value="'+(dateTo||'')+'">'
+    +'<button class="btn btn-primary btn-sm" onclick="applyStatsCustom()">OK</button>'
+    +'</div>'
     +'</div>';
 
-  // KPIs
+  // ── KPIs ──
   html+='<div class="stat-grid">'
     +'<div class="stat-card"><div class="stat-val">'+fmt(revenue)+'</div><div class="stat-lbl">CA</div></div>'
     +'<div class="stat-card"><div class="stat-val">'+done.length+'</div><div class="stat-lbl">Commandes</div></div>'
@@ -3942,12 +3945,15 @@ function adminStats(period){
     +'<div class="stat-card"><div class="stat-val">'+clients.length+'</div><div class="stat-lbl">Clients</div></div>'
     +'</div>';
 
-  // CA par jour de semaine
-  html+='<div class="sec-title mt-2">📅 CA par jour</div>'
-    +'<div class="card mb-2">';
+  // ── Bouton export CSV ──
+  html+='<button class="btn btn-secondary btn-full" style="margin:.5rem 0" onclick="exportStatsCSV(\''+period+'\',\''+(dateFrom||'')+'\',\''+(dateTo||'')+'\')">'
+    +'📊 Exporter en CSV (Excel / Google Sheets)</button>';
+
+  // ── CA par jour ──
+  html+='<div class="sec-title mt-2">📅 CA par jour</div><div class="card mb-2">';
   dayNames.forEach(function(d,i){
-    var pct = Math.round((byDay[i]/maxDay)*100);
-    var col = byDay[i]>0?'var(--red)':'var(--dark4)';
+    var pct=Math.round((byDay[i]/maxDay)*100);
+    var col=byDay[i]>0?'var(--red)':'var(--dark4)';
     html+='<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.45rem">'
       +'<div style="width:28px;font-size:.75rem;font-weight:700;color:var(--muted)">'+d+'</div>'
       +'<div style="flex:1;background:var(--dark4);border-radius:100px;height:8px">'
@@ -3958,12 +3964,11 @@ function adminStats(period){
   });
   html+='</div>';
 
-  // Affluence par heure
-  html+='<div class="sec-title">🕐 Affluence par créneau</div>'
-    +'<div class="card mb-2">';
+  // ── Affluence par créneau ──
+  html+='<div class="sec-title">\u{1F550} Affluence par créneau</div><div class="card mb-2">';
   Object.keys(byHour).sort().forEach(function(h){
-    var pct = Math.round((byHour[h]/maxHour)*100);
-    var col = pct>=80?'#ef4444':pct>=50?'#f59e0b':'#10b981';
+    var pct=Math.round((byHour[h]/maxHour)*100);
+    var col=pct>=80?'#ef4444':pct>=50?'#f59e0b':'#10b981';
     html+='<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.45rem">'
       +'<div style="width:40px;font-size:.75rem;font-weight:700">'+h+'h</div>'
       +'<div style="flex:1;background:var(--dark4);border-radius:100px;height:8px">'
@@ -3974,29 +3979,27 @@ function adminStats(period){
   if(!Object.keys(byHour).length) html+='<p class="text-sm text-muted">Pas encore de données</p>';
   html+='</div>';
 
-  // Top produits
+  // ── Top produits ──
   if(top.length){
-    html+='<div class="sec-title">🏆 Top produits</div>';
-    var maxFreq = top[0][1]||1;
+    html+='<div class="sec-title">\u{1F3C6} Top produits</div>';
+    var maxFreq=top[0][1]||1;
     top.forEach(function(e,i){
-      var pct = Math.round((e[1]/maxFreq)*100);
+      var pct=Math.round((e[1]/maxFreq)*100);
       html+='<div style="display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:var(--dark3);border-radius:8px;margin-bottom:.35rem">'
         +'<div style="min-width:20px;font-weight:800;color:var(--red);font-size:.85rem">'+(i+1)+'</div>'
-        +'<div style="flex:1">'
-        +'<div class="fw-700 text-sm">'+e[0]+'</div>'
+        +'<div style="flex:1"><div class="fw-700 text-sm">'+e[0]+'</div>'
         +'<div style="background:var(--dark4);border-radius:100px;height:4px;margin-top:.25rem">'
-        +'<div style="background:var(--red);width:'+pct+'%;height:100%;border-radius:100px"></div></div>'
-        +'</div>'
+        +'<div style="background:var(--red);width:'+pct+'%;height:100%;border-radius:100px"></div></div></div>'
         +'<div class="fw-700 text-gold" style="font-size:.85rem">'+e[1]+'x</div>'
         +'</div>';
     });
   }
-  // Avis clients
-  var ratings = load('ba_ratings',[]);
-  // Also check Firebase
+
+  // ── Avis clients ──
+  var ratings=load('ba_ratings',[]);
   if(ratings.length){
     html+='<div class="sec-title">⭐ Avis clients ('+ratings.length+')</div>';
-    var avgNote = ratings.reduce(function(s,r){return s+r.note;},0)/ratings.length;
+    var avgNote=ratings.reduce(function(s,r){return s+r.note;},0)/ratings.length;
     html+='<div style="text-align:center;padding:.75rem;background:var(--dark3);border-radius:var(--radius);margin-bottom:.75rem">'
       +'<div style="font-size:2rem;font-weight:800;color:var(--gold)">'+avgNote.toFixed(1)+'/5</div>'
       +'<div class="text-sm text-muted">Note moyenne sur '+ratings.length+' avis</div></div>';
@@ -4010,8 +4013,74 @@ function adminStats(period){
         +'</div>';
     });
   }
+
   return html+'</div>';
 }
+
+function toggleStatsCustom(){
+  var el=document.getElementById('stats-custom-range');
+  if(el) el.style.display = el.style.display==='none'?'flex':'none';
+}
+
+function applyStatsCustom(){
+  var from=(document.getElementById('stats-from')||{}).value||'';
+  var to=(document.getElementById('stats-to')||{}).value||'';
+  if(!from||!to){toast('Choisissez une date de début et de fin','warning');return;}
+  document.getElementById('admin-content').innerHTML=adminStats('custom',from,to);
+}
+
+function exportStatsCSV(period, dateFrom, dateTo){
+  var allOrders = getOrders();
+  var now = new Date();
+  var filtered = allOrders.filter(function(o){
+    if(o.status==='cancelled') return false;
+    var d=new Date(o.createdAt);
+    if(period==='week')  return (now-d)<7*86400000;
+    if(period==='month') return (now-d)<30*86400000;
+    if(period==='custom'&&dateFrom&&dateTo){
+      var from=new Date(dateFrom+'T00:00:00');
+      var to=new Date(dateTo+'T23:59:59');
+      return d>=from&&d<=to;
+    }
+    return true;
+  });
+
+  var BOM = '\uFEFF'; // BOM UTF-8 pour Excel
+  var rows = ['N°;Date;Heure retrait;Client;Téléphone;Articles;Total (€);Paiement;Statut'];
+  filtered.forEach(function(o){
+    var items=(o.items||[]).map(function(i){return i.name+(i.details?' ('+i.details+')':'');}).join(' | ');
+    var statuts={pending:'En attente',confirmed:'Confirmée',preparing:'En préparation',ready:'Prête',picked_up:'Récupérée',cancelled:'Annulée'};
+    rows.push([
+      o.orderNumber||'',
+      new Date(o.createdAt).toLocaleDateString('fr-FR'),
+      o.pickupTime||'',
+      o.userPrenom||'',
+      o.userPhone||'',
+      '"'+items.replace(/"/g,"'")+'"',
+      (o.total||0).toFixed(2).replace('.',','),
+      o.payment||'',
+      statuts[o.status]||o.status
+    ].join(';'));
+  });
+
+  // Ajouter totaux en bas
+  var done=filtered.filter(function(o){return o.status==='picked_up';});
+  var revenue=done.reduce(function(s,o){return s+(o.total||0);},0);
+  rows.push('');
+  rows.push(';;;;;;TOTAL (CA);'+revenue.toFixed(2).replace('.',',')+';;');
+  rows.push(';;;;;;NB COMMANDES;'+done.length+';;');
+
+  var csv = BOM + rows.join('\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var label = period==='custom'?(dateFrom+'_au_'+dateTo):period;
+  a.href=url; a.download='break_antillais_stats_'+label+'.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('Export CSV téléchargé !','success');
+}
+
 
 function generateMarketCode(userId, amount) {
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
