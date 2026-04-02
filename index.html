@@ -696,25 +696,22 @@ function startFirebaseListeners() {
 }
 
 
-// Suppression de toutes les commandes de test
+// Remise à zéro totale des commandes de test
 (function(){
-  var toDelete = ['0036','0039'];
-  // 1. Vider le localStorage en premier
-  try { localStorage.removeItem('_ba_ba_orders'); } catch(e){}
-  // 2. Supprimer TOUT dans Firebase
+  var confirmed = false;
+  // Purger Firebase
   db.ref('data/ba_orders').once('value').then(function(snap){
     var v = snap.val(); if (!v) return;
-    var keys = Object.keys(v);
-    keys.forEach(function(k){ db.ref('data/ba_orders/'+k).remove(); });
-    console.log('[BA] Purge: ' + keys.length + ' commandes supprimées');
+    var refs = Object.keys(v);
+    refs.forEach(function(k){ db.ref('data/ba_orders/'+k).remove(); });
+    console.log('[BA] '+refs.length+' commandes supprimées de Firebase');
   });
-  // 3. Repurger le localStorage apres 2s (au cas ou le listener ait rechargé)
-  setTimeout(function(){
-    try { localStorage.removeItem('_ba_ba_orders'); } catch(e){}
-  }, 2000);
-  setTimeout(function(){
-    try { localStorage.removeItem('_ba_ba_orders'); } catch(e){}
-  }, 5000);
+  // Purger localStorage
+  try {
+    localStorage.removeItem('_ba_ba_orders');
+    localStorage.removeItem('_ba_ba_last_save');
+    console.log('[BA] Commandes localStorage purgées');
+  } catch(e){}
 })();
 
 
@@ -1498,9 +1495,9 @@ function renderHome() {
       var nd = new Date(); nd.setDate(nd.getDate()+d);
       if (openDays.indexOf(nd.getDay())>=0) { nextWorkDay=nd; break; }
     }
-    html += '<div style="display:block;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem 1.1rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 1.1rem">Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
+    html += '<div style="display:block;width:100%;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem .9rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 0">Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
   } else if (todayClosed) {
-    html += '<div style="display:block;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem 1.1rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 1.1rem">Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
+    html += '<div style="display:block;width:100%;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem .9rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 0">Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
   }
   // Upcoming closure banner (only if within next 7 days and it's a working day)
   if (upcomingClosure) {
@@ -2152,13 +2149,10 @@ function showCheckout() {
   var todayOpen = now < cutoff;
   var dates=[];
   var openDays = cfg.openDays||[2,3,4,5,6];
-  var closedDates = cfg.closedDates||[];
   for (var d=0; d<7; d++) {
     var dt=new Date(); dt.setDate(dt.getDate()+d);
     if (d===0 && !todayOpen) continue;
     if (openDays.indexOf(dt.getDay()) < 0) continue;
-    var dtStr=dt.toISOString().split('T')[0];
-    if (closedDates.find(function(c){return c.date===dtStr;})) continue; // fermeture exceptionnelle
     dates.push({
       value: dt.toISOString().split('T')[0],
       label: d===0 ? 'Aujourd&apos;hui' : d===1 ? 'Demain' : dt.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'short'})
