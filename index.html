@@ -44,7 +44,7 @@ html, body { background: var(--dark) !important; color: var(--text); font-family
 /* ── Fond d'ecran global (sauf écran chargement) ── */
 #app-bg { display: none; }
 #app-overlay { display: none; }
-body > *:not(#loading):not(#app-bg):not(nav) { position:relative; z-index:1; }
+body > *:not(#loading):not(#app-bg):not(nav):not(#m-product):not(#m-auth):not(.toast-wrap) { position:relative; z-index:1; }
 
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -142,6 +142,8 @@ body > *:not(#loading):not(#app-bg):not(nav) { position:relative; z-index:1; }
   gap: .45rem; padding: .75rem 1.4rem; border-radius: var(--radius-sm);
   border: none; cursor: pointer; font-family: var(--body);
   font-weight: 600; font-size: .88rem; transition: all .2s; text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn-primary { background: var(--red); color: #fff; box-shadow: 0 4px 18px rgba(200,35,43,.3); }
 .btn-primary:hover { background: var(--red2); transform: translateY(-1px); }
@@ -229,6 +231,7 @@ body > *:not(#loading):not(#app-bg):not(nav) { position:relative; z-index:1; }
   padding: .38rem .8rem; border: 1.5px solid var(--border);
   border-radius: 100px; font-size: .78rem; font-weight: 600;
   cursor: pointer; transition: all .15s; background: transparent; color: var(--text);
+  touch-action: manipulation;
 }
 .chip:hover { border-color: var(--red); color: var(--red); }
 .chip.on { background: var(--red); color: #fff; border-color: var(--red); }
@@ -248,6 +251,8 @@ body > *:not(#loading):not(#app-bg):not(nav) { position:relative; z-index:1; }
   background: var(--dark3); border: 1.5px solid var(--border);
   border-radius: var(--radius); overflow: hidden; cursor: pointer;
   transition: all .2s; position: relative;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(200,35,43,.15);
 }
 .pcard:hover { border-color: var(--red); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(200,35,43,.15); }
 .pcard.unavail { opacity: .45; cursor: not-allowed; }
@@ -1626,9 +1631,8 @@ function pcardHTML(p) {
   var priceHtml = p.isClassique
     ? '<div class="pcard-price" style="font-size:.8rem;color:var(--muted)">Prix selon selection</div>'
     : '<div class="pcard-price">'+fmt(p.price||0)+'</div>';
-  var pid = (p.id||'').replace(/'/g, "\\'");
-  var onclickAttr = clickable ? ' onclick="openProduct(\'' + pid + '\')"' : '';
-  return '<div class="'+cls+'"'+onclickAttr+'>'
+  var clickAttr = clickable ? ' data-pid="'+p.id+'" onclick="openProduct(this.dataset.pid)"' : '';
+  return '<div class="'+cls+'"'+clickAttr+'>'
     + imgHtml
     + (p.soon ? '<span class="soon-badge">Bientot</span>' : '')
     + favBtn
@@ -1640,13 +1644,6 @@ function pcardHTML(p) {
     + '</div></div>';
 }
 
-
-
-// ══════════════════════════════════════════════════════
-// PRODUCT MODAL
-// ══════════════════════════════════════════════════════
-
-// ══ BOX CONFIGURATOR ══
 function buildBoxConfigurator(p) {
   var maxSav = p.maxSaveurs || 2;
   var totalQty = p.qty || 10;
@@ -2385,6 +2382,7 @@ function confirmOrder(){
     }
   }
   saveOrder(order);
+  db.ref('data/ba_orders/'+order.id).set(order);
   cart=[]; closeModal('m-product'); updateBadges();
   setTimeout(function(){
     order.status='confirmed';
