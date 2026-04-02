@@ -567,7 +567,14 @@ function loadFromFirebase(cb) {
     // Load all flat data
     Object.keys(d).forEach(function(k){
       if (k === 'users') return;
-      try { localStorage.setItem('_ba_'+k, JSON.stringify(d[k])); } catch(e) {}
+      var val = d[k];
+      // Firebase retourne les arrays comme objets → convertir en tableau si nécessaire
+      if (k === 'ba_products' || k === 'ba_orders' || k === 'ba_meats' || k === 'ba_sauces' || k === 'ba_supplements') {
+        if (val && !Array.isArray(val) && typeof val === 'object') {
+          val = Object.values(val).filter(function(v){ return v && typeof v === 'object'; });
+        }
+      }
+      try { localStorage.setItem('_ba_'+k, JSON.stringify(val)); } catch(e) {}
     });
     // Merge users: from ba_users array (old format) + users object (new format)
     var mergedUsers = {};
@@ -672,6 +679,16 @@ function startFirebaseListeners() {
   };
   db.ref('data/users').on('value', function(){ mergeUsers(); });
   db.ref('data/ba_users').on('value', function(){ mergeUsers(); });
+
+  // Sync produits en temps réel (stock agoulou etc.)
+  db.ref('data/ba_products').on('value', function(snap){
+    var v = snap.val();
+    if (v === null) return;
+    var arr = Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.id; });
+    try { localStorage.setItem('_ba_ba_products', JSON.stringify(arr)); } catch(e) {}
+    // Rafraîchir l'affichage produits si nécessaire
+    if (currentScreen === 'home') renderHome();
+  });
 
   // Listen for real-time status updates
   if (user && !isAdmin) {
@@ -893,6 +910,14 @@ function getProducts() {
   if (!saved) {
     return DEFAULT_PRODUCTS.filter(function(p){ return deleted.indexOf(p.id) < 0; });
   }
+  // Défense : si saved est un objet Firebase (pas un tableau), le convertir
+  if (!Array.isArray(saved)) {
+    saved = Object.values(saved).filter(function(p){ return p && p.id; });
+    save('ba_products', saved);
+  }
+  if (!saved.length) {
+    return DEFAULT_PRODUCTS.filter(function(p){ return deleted.indexOf(p.id) < 0; });
+  }
   // Merge: add new default products not yet in saved list AND not deleted
   var savedIds = saved.map(function(p){ return p.id; });
   var missing = DEFAULT_PRODUCTS.filter(function(p){
@@ -961,6 +986,7 @@ function saveProduct(p) {
   }
   var saved = load('ba_products', null);
   if (!saved) saved = DEFAULT_PRODUCTS.slice();
+  if (!Array.isArray(saved)) saved = Object.values(saved).filter(function(p){ return p && p.id; });
   var idx = saved.findIndex(function(x){ return x.id === pToSave.id; });
   if (idx >= 0) saved[idx] = pToSave; else saved.push(pToSave);
   save('ba_products', saved);
