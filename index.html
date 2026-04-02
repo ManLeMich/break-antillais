@@ -183,10 +183,10 @@ body > *:not(#loading):not(#app-bg):not(nav):not(#m-product):not(#m-auth):not(.t
 }
 #m-auth { z-index: 10050; }
 .modal-overlay {
-  /* absolute par rapport à m-product (qui est fixed) */
   position: absolute; inset: 0;
   background: rgba(0,0,0,.82);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: max(env(safe-area-inset-top),.5rem) .75rem calc(env(safe-area-inset-bottom) + 80px);
