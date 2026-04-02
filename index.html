@@ -695,38 +695,20 @@ function startFirebaseListeners() {
   }
 }
 
-// Suppression forcée commandes 0036 et 0039
 (function(){
   var toDelete = ['0036','0039'];
-  function _purgeOrders() {
-    // 1. Purger le localStorage
-    try {
-      var local = JSON.parse(localStorage.getItem('_ba_ba_orders')||'[]');
-      var before = local.length;
-      local = local.filter(function(x){ return x && toDelete.indexOf(x.orderNumber) < 0; });
-      if (local.length !== before) localStorage.setItem('_ba_ba_orders', JSON.stringify(local));
-    } catch(e){}
-    // 2. Purger Firebase
-    db.ref('data/ba_orders').once('value').then(function(snap){
-      var v = snap.val(); if (!v) return;
-      var orders = Array.isArray(v) ? v : Object.values(v);
-      orders.forEach(function(o){
-        if (o && toDelete.indexOf(o.orderNumber) >= 0) {
-          db.ref('data/ba_orders/'+o.id).remove();
-          console.log('[BA] Supprimé:', o.orderNumber);
-        }
-      });
+  db.ref('data/ba_orders').once('value').then(function(snap){
+    var v = snap.val(); if (!v) return;
+    var orders = Array.isArray(v) ? v : Object.values(v);
+    orders.forEach(function(o){
+      if (o && toDelete.indexOf(o.orderNumber) >= 0) {
+        db.ref('data/ba_orders/'+o.id).remove();
+        try { var local=JSON.parse(localStorage.getItem('_ba_ba_orders')||'[]');
+          local=local.filter(function(x){return x&&x.orderNumber!==o.orderNumber;});
+          localStorage.setItem('_ba_ba_orders',JSON.stringify(local)); } catch(e){}
+      }
     });
-  }
-  // Exécuter immédiatement
-  _purgeOrders();
-  // Réessayer toutes les 3s pendant 60s (au cas où Firebase tarde)
-  var _purgeCount = 0;
-  var _purgeInterval = setInterval(function(){
-    _purgeOrders();
-    _purgeCount++;
-    if (_purgeCount >= 20) clearInterval(_purgeInterval);
-  }, 3000);
+  });
 })();
 
 
@@ -1510,9 +1492,9 @@ function renderHome() {
       var nd = new Date(); nd.setDate(nd.getDate()+d);
       if (openDays.indexOf(nd.getDay())>=0) { nextWorkDay=nd; break; }
     }
-    html += '<div style="width:100%;text-align:center;font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600">📅 Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
+    html += '<p style="font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600;text-align:center">📅 Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</p>';
   } else if (todayClosed) {
-    html += '<div style="width:100%;text-align:center;font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600">📅 Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
+    html += '<p style="font-size:.78rem;color:#f59e0b;margin-top:.35rem;font-weight:600;text-align:center">📅 Fermeture exceptionnelle — '+todayClosed.msg+'</p>';
   }
   // Upcoming closure banner (only if within next 7 days and it's a working day)
   if (upcomingClosure) {
@@ -1524,7 +1506,7 @@ function renderHome() {
         +'</div>';
     }
   }
-  html += '<p style="font-size:.78rem;color:var(--muted);margin-top:.35rem;text-align:center">Retrait '+cfg.start+' — '+cfg.end+'</div>';
+  html += '<p style="font-size:.78rem;color:var(--muted);margin-top:.35rem;text-align:center">Retrait '+cfg.start+' — '+cfg.end+'</p>';
   html += '</div>';
 
   // Offres
@@ -1806,7 +1788,7 @@ function continueOpenProduct(id) {
     +modalVisualHtml
     +'<h2 class="modal-title text-center">'+p.name+'</h2>'
     +'<div style="text-align:center;font-family:var(--head);font-size:1.35rem;font-weight:800;color:var(--gold);margin-bottom:.4rem" id="modal-main-price">'+(p.isClassique?'—':fmt(p.price||0))+'</div>'
-    +'<p style="text-align:center;font-size:.8rem;color:var(--muted);margin-bottom:.9rem">'+(p.desc||'')+'</div>';
+    +'<p style="text-align:center;font-size:.8rem;color:var(--muted);margin-bottom:.9rem">'+(p.desc||'')+'</p>';
 
   if (isBox) {
     html += buildBoxConfigurator(p);
