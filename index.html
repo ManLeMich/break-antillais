@@ -3721,21 +3721,56 @@ function advanceOrder(id) {
     o.updatedAt = new Date().toISOString();
 
     // Points si commande récupérée
-    if (nxt === 'picked_up' && !o.pointsAwarded) {
+    if (nxt === 'picked_up' && !o.pointsAwarded && o.userId && o.userId.indexOf('guest-') !== 0) {
+      // Chercher le user dans data/users D'ABORD, puis data/ba_users
+      var findAndAwardPoints = function(u) {
+        if (!u || !u.id) return;
+        var cfg = getCfg();
+        // Toujours utiliser cfg.ptsPerEuro pour le calcul
+        var ptsPerEuro = cfg.ptsPerEuro || 10;
+        var pts = Math.floor(o.total || 0) * ptsPerEuro;
+        var bonus = (o.total || 0) >= (cfg.bonusOrderThreshold || 20) ? (cfg.bonusOrderPts || 5) : 0;
+        var totalPts = pts + bonus;
+        u.points = (u.points || 0) + totalPts;
+        // Sauvegarder dans les deux emplacements Firebase
+        db.ref('data/users/' + u.id + '/points').set(u.points);
+        db.ref('data/ba_users').once('value').then(function(snap){
+          var arr = snap.val();
+          if (!arr) return;
+          var list = Array.isArray(arr) ? arr : Object.values(arr);
+          var idx2 = list.findIndex(function(x){ return x && x.id === u.id; });
+          if (idx2 >= 0) { list[idx2].points = u.points; db.ref('data/ba_users').set(list); }
+        });
+        // Historique points
+        var hist = {'pts':totalPts,'label':'Commande N°'+o.orderNumber+' ('+ptsPerEuro+' pts/€)','at':new Date().toISOString()};
+        db.ref('data/ba_pts_history_'+u.id).once('value').then(function(hs){
+          var hArr = hs.val() || [];
+          if (!Array.isArray(hArr)) hArr = Object.values(hArr);
+          hArr.unshift(hist);
+          db.ref('data/ba_pts_history_'+u.id).set(hArr.slice(0,50));
+        });
+        o.pointsAwarded = true;
+        var notifMsg = '+' + totalPts + ' points' + (bonus > 0 ? ' (dont ' + bonus + ' pts bonus)' : '') + ' ajoutés !';
+        notify(o.userId, '🎁 Points ajoutés !', notifMsg);
+        db.ref('status_updates/' + o.userId + '/palier-check').set({ status: 'check_palier', pts: totalPts, at: new Date().toISOString() });
+        db.ref('data/ba_orders/' + o.id).set(o);
+        // Aussi mettre à jour localStorage
+        try {
+          var lsUsers = JSON.parse(localStorage.getItem('_ba_ba_users')||'[]');
+          var lu = Array.isArray(lsUsers) ? lsUsers : Object.values(lsUsers);
+          var li = lu.findIndex(function(x){ return x && x.id === u.id; });
+          if (li >= 0) { lu[li].points = u.points; localStorage.setItem('_ba_ba_users', JSON.stringify(lu)); }
+        } catch(e) {}
+      };
+      // Chercher d'abord dans data/users
       db.ref('data/users/' + o.userId).once('value').then(function(usnap) {
         var u = usnap.val();
-        if (u) {
-          var cfg = getCfg();
-          var pts = Math.floor(o.total || 0) * (cfg.ptsPerEuro || 10);
-          var bonus = (o.total || 0) >= (cfg.bonusOrderThreshold || 20) ? (cfg.bonusOrderPts || 5) : 0;
-          u.points = (u.points || 0) + pts + bonus;
-          db.ref('data/users/' + u.id + '/points').set(u.points);
-          o.pointsAwarded = true;
-          var notifMsg = '+' + (pts + bonus) + ' points' + (bonus > 0 ? ' (dont ' + bonus + ' pts bonus)' : '') + '.';
-          notify(o.userId, '🎁 Points ajoutes !', notifMsg);
-          db.ref('status_updates/' + o.userId + '/palier-check').set({ status: 'check_palier', at: new Date().toISOString() });
-          // Réécrire la commande avec pointsAwarded
-          db.ref('data/ba_orders/' + o.id).set(o);
+        if (u && u.id) {
+          findAndAwardPoints(u);
+        } else {
+          // Fallback: chercher dans ba_users
+          var local = getUsers().find(function(x){ return x.id === o.userId; });
+          if (local) findAndAwardPoints(local);
         }
       });
     }
