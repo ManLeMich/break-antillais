@@ -993,11 +993,11 @@ function saveOrder(order) {
   try { localStorage.setItem('_ba_ba_orders', JSON.stringify(orders)); } catch(e) {}
   // 1. Nœud principal de l'app
   db.ref('data/ba_orders/'+order.id).set(order).catch(function(e){ console.warn('FB saveOrder:',e); });
-  // 2. Archive permanente — jamais écrasée par le listener, écriture seule
+  // 2. Sauvegarde sécurisée — nœud séparé jamais touché par les listeners
   var archiveData = Object.assign({}, order, {_savedAt: new Date().toISOString()});
-  db.ref('data/ba_archive/'+order.id).set(archiveData).catch(function(e){});
-  // 3. Journal par date — lisible directement dans la console Firebase
-  var dateKey = (order.pickupDate || new Date().toISOString().split('T')[0]).replace(/-/g,'_');
+  db.ref('data/ba_safe/'+order.id).set(archiveData).catch(function(e){ console.warn('safe write:', e); });
+  // 3. Journal par date — pour retrouver les commandes d'un jour précis
+  var dateKey = (order.pickupDate || new Date().toISOString().split('T')[0]);
   db.ref('data/ba_journal/'+dateKey+'/'+order.id).set(archiveData).catch(function(e){});
   try { localStorage.setItem('_ba_ba_last_save', JSON.stringify(new Date().toISOString())); } catch(e) {}
 }
@@ -2487,7 +2487,7 @@ function confirmOrder(){
     // Compter le total d'agoulou commandés (stock partagé entre toutes les variantes)
     var agoulouQty = 0;
     order.items.forEach(function(item){
-      var p = prods.find(function(x){ return x.id===item.id; });
+      var p = prods.find(function(x){ return x.id===(item.pid||item.id); });
       if (!p) return;
       if (p.cat === 'agoulou') {
         agoulouQty += (item.qty || 1);
@@ -2497,8 +2497,8 @@ function confirmOrder(){
         p.stock = Math.max(0, p.stock - qty);
         if (p.stock === 0) p.ok = false;
         saveProduct(p);
-        db.ref('data/ba_products/'+p.id+'/stock').set(p.stock);
-        if (p.stock === 0) db.ref('data/ba_products/'+p.id+'/ok').set(false);
+        // Écrire dans Firebase de façon atomique
+        db.ref('data/ba_products/'+p.id).update({stock: p.stock, ok: p.ok});
         changed = true;
       }
     });
@@ -2515,8 +2515,7 @@ function confirmOrder(){
           p.stock = newStock;
           if (isEpuise) p.ok = false;
           saveProduct(p);
-          db.ref('data/ba_products/'+p.id+'/stock').set(newStock);
-          if (isEpuise) db.ref('data/ba_products/'+p.id+'/ok').set(false);
+          db.ref('data/ba_products/'+p.id).update({stock: newStock, ok: p.ok});
         });
         changed = true;
       }
@@ -3056,7 +3055,7 @@ function sendMsgToCreneau() {
 function recoverOrdersFromBackup() {
   toast('Récupération en cours...', 'info', 2000);
   // Lire depuis archive (source la plus fiable)
-  db.ref('data/ba_archive').once('value').then(function(snap) {
+  db.ref('data/ba_safe').once('value').then(function(snap) {
     var v = snap.val();
     var archiveOrders = v ? (Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.id; })) : [];
     // Lire aussi depuis journal (toutes les dates)
