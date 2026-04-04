@@ -986,15 +986,19 @@ function saveUser(user) {
   saveUserToFirebase(user);
 }
 function saveOrder(order) {
-  // Mettre à jour le cache localStorage (tableau)
+  // Mettre à jour le cache localStorage
   var orders = getOrders();
   var idx = orders.findIndex(function(o){ return o.id === order.id; });
   if (idx >= 0) orders[idx] = order; else orders.push(order);
   try { localStorage.setItem('_ba_ba_orders', JSON.stringify(orders)); } catch(e) {}
-  // Écrire dans Firebase par ID
+  // 1. Nœud principal de l'app
   db.ref('data/ba_orders/'+order.id).set(order).catch(function(e){ console.warn('FB saveOrder:',e); });
-  // Backup dans un nœud séparé pour récupération d'urgence
-  db.ref('backup/orders/'+order.id).set(order).catch(function(e){});
+  // 2. Archive permanente — jamais écrasée par le listener, écriture seule
+  var archiveData = Object.assign({}, order, {_savedAt: new Date().toISOString()});
+  db.ref('archive/orders/'+order.id).set(archiveData).catch(function(e){});
+  // 3. Journal par date — lisible directement dans la console Firebase
+  var dateKey = (order.pickupDate || new Date().toISOString().split('T')[0]).replace(/-/g,'_');
+  db.ref('journal/'+dateKey+'/'+order.id).set(archiveData).catch(function(e){});
   try { localStorage.setItem('_ba_ba_last_save', JSON.stringify(new Date().toISOString())); } catch(e) {}
 }
 function saveProduct(p) {
@@ -3050,18 +3054,43 @@ function sendMsgToCreneau() {
 
 // ══ RÉCUPÉRATION D'URGENCE DES COMMANDES ══
 function recoverOrdersFromBackup() {
-  db.ref('backup/orders').once('value').then(function(snap) {
+  toast('Récupération en cours...', 'info', 2000);
+  // Lire depuis archive (source la plus fiable)
+  db.ref('archive/orders').once('value').then(function(snap) {
     var v = snap.val();
-    if (!v) { toast('Aucun backup trouvé', 'error'); return; }
-    var backupOrders = Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.id; });
-    if (!backupOrders.length) { toast('Backup vide', 'error'); return; }
-    // Fusionner avec ba_orders Firebase
-    var updates = {};
-    backupOrders.forEach(function(o){ updates[o.id] = o; });
-    db.ref('data/ba_orders').update(updates).then(function(){
-      toast('✅ '+backupOrders.length+' commandes récupérées depuis le backup !', 'success', 5000);
+    var archiveOrders = v ? (Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.id; })) : [];
+    // Lire aussi depuis journal (toutes les dates)
+    db.ref('journal').once('value').then(function(jsnap) {
+      var jv = jsnap.val() || {};
+      var journalOrders = [];
+      Object.values(jv).forEach(function(day){
+        if (!day) return;
+        Object.values(day).forEach(function(o){ if (o && o.id) journalOrders.push(o); });
+      });
+      // Fusionner archive + journal
+      var all = {};
+      archiveOrders.forEach(function(o){ all[o.id] = o; });
+      journalOrders.forEach(function(o){ if (!all[o.id]) all[o.id] = o; });
+      var allOrders = Object.values(all);
+      if (!allOrders.length) { toast('Aucune commande dans les archives', 'error'); return; }
+      // Restaurer dans data/ba_orders
+      var updates = {};
+      allOrders.forEach(function(o){ if (o && o.id) updates[o.id] = o; });
+      db.ref('data/ba_orders').update(updates).then(function(){
+        // Mettre à jour localStorage
+        var existing = getOrders();
+        allOrders.forEach(function(o){
+          var i = existing.findIndex(function(x){ return x && x.id === o.id; });
+          if (i >= 0) existing[i] = o; else existing.push(o);
+        });
+        try { localStorage.setItem('_ba_ba_orders', JSON.stringify(existing)); } catch(e) {}
+        toast('✅ '+allOrders.length+' commandes restaurées !', 'success', 6000);
+        // Rafraîchir l'interface
+        var ac = document.getElementById('admin-content');
+        if (ac) ac.innerHTML = adminOrders();
+      }).catch(function(e){ toast('Erreur: '+e.message, 'error'); });
     });
-  });
+  }).catch(function(e){ toast('Erreur archive: '+e.message, 'error'); });
 }
 
 function adminDashboard(){
