@@ -354,7 +354,7 @@ body > *:not(#loading):not(#app-bg):not(nav):not(#m-product):not(#m-auth):not(.t
 .sec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
 /* ── TOAST ── */
-.toast-wrap { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: .4rem; max-width: 290px; pointer-events: none; }
+.toast-wrap { position: fixed; top: 1rem; right: 1rem; z-index: 99999; display: flex; flex-direction: column; gap: .4rem; max-width: 290px; pointer-events: none; }
 .toast {
   padding: .65rem 1.1rem; border-radius: 10px; font-weight: 600;
   font-size: .85rem; animation: slideUp .25s ease; pointer-events: auto;
@@ -2033,6 +2033,36 @@ function changeQty(delta) {
   var el = document.getElementById('prod-qty');
   if (el) el.textContent = _pendingQty;
   updateModalTotalPrice();
+  // Vérifier stock et désactiver bouton Ajouter + bouton + si max atteint
+  if (!pendingProd) return;
+  var stockMax = null;
+  if (pendingProd.cat === 'agoulou') {
+    var ar = getProducts().find(function(x){ return x.cat==='agoulou' && x.stock !== null && x.stock !== undefined; });
+    if (ar) stockMax = ar.stock;
+  } else if (pendingProd.stock !== null && pendingProd.stock !== undefined) {
+    stockMax = pendingProd.stock;
+  }
+  if (stockMax === null) return;
+  var inCart = pendingProd.cat === 'agoulou'
+    ? cart.filter(function(i){return i.cat==='agoulou';}).reduce(function(s,i){return s+(i.qty||1);},0)
+    : cart.filter(function(i){return (i.pid||i.id)===pendingProd.id;}).reduce(function(s,i){return s+(i.qty||1);},0);
+  var available = Math.max(0, stockMax - inCart);
+  // Bouton Ajouter
+  var addBtn = document.querySelector('#m-product .btn-primary');
+  if (addBtn) {
+    if (_pendingQty > available) {
+      addBtn.disabled = true;
+      addBtn.style.opacity = '.45';
+      addBtn.textContent = available === 0 ? 'Épuisé' : 'Max '+available+' disponible'+(available>1?'s':'');
+    } else {
+      addBtn.disabled = false;
+      addBtn.style.opacity = '';
+      addBtn.innerHTML = '🛒 Ajouter au panier';
+    }
+  }
+  // Bouton + désactivé si max atteint
+  var plusBtn = document.getElementById('qty-plus-btn');
+  if (plusBtn) plusBtn.disabled = (_pendingQty >= available);
 }
 
 function updateModalTotalPrice() {
@@ -2128,6 +2158,24 @@ function toggleCrudite(btn) {
     else{pendingExtras.crudites.push(v);btn.classList.add('on');}
   }
 }
+function showStockAlert(msg) {
+  // Popup d'alerte stock centrée, au-dessus de tout
+  var existing = document.getElementById('stock-alert-popup');
+  if (existing) existing.remove();
+  var popup = document.createElement('div');
+  popup.id = 'stock-alert-popup';
+  popup.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.6);animation:fadeIn .15s ease';
+  popup.innerHTML = '<div style="background:var(--dark2);border:2px solid #ef4444;border-radius:14px;padding:1.5rem 1.25rem;max-width:320px;width:100%;text-align:center;animation:slideUp .2s ease">'
+    + '<div style="font-size:2rem;margin-bottom:.5rem">⚠️</div>'
+    + '<div style="font-family:var(--head);font-size:1rem;font-weight:800;color:#ef4444;margin-bottom:.5rem">Erreur de Stock</div>'
+    + '<div style="font-size:.88rem;color:var(--text);line-height:1.5;margin-bottom:1rem">' + msg + '</div>'
+    + '<button class="btn btn-primary btn-full" onclick="document.getElementById(\'stock-alert-popup\').remove()">Compris</button>'
+    + '</div>';
+  document.body.appendChild(popup);
+  // Fermer en cliquant en dehors
+  popup.addEventListener('click', function(e){ if(e.target===popup) popup.remove(); });
+}
+
 function addToCart() {
   if (!pendingProd) return;
   // Anti-double-ajout
@@ -2182,8 +2230,8 @@ function addToCart() {
     var inCart = cart.filter(function(i){ return i.cat==='agoulou'; }).reduce(function(s,i){return s+(i.qty||1);},0);
     if (agoulouStock !== null && (inCart + qtyToAdd) > agoulouStock) {
       var reste = Math.max(0, agoulouStock - inCart);
-      if (reste === 0) toast('Désolé, les Agoulous sont épuisés !', 'error', 4000);
-      else toast('Désolé, il ne reste que '+reste+' Agoulou(s) disponible(s).', 'warning', 4000);
+      if (reste === 0) showStockAlert('Désolé, les Agoulous sont épuisés !');
+      else showStockAlert('Désolé, il ne reste que '+reste+' Agoulou(s) disponible(s).');
       if (addBtn) addBtn._adding = false;
       return;
     }
@@ -2192,8 +2240,8 @@ function addToCart() {
     var inCartProd = cart.filter(function(i){ return i.pid===pendingProd.id; }).reduce(function(s,i){return s+(i.qty||1);},0);
     if ((inCartProd + qtyToAdd) > pendingProd.stock) {
       var resteProd = Math.max(0, pendingProd.stock - inCartProd);
-      if (resteProd === 0) toast('Désolé, ce produit est épuisé !', 'error', 4000);
-      else toast('Désolé, il ne reste que '+resteProd+' article(s) disponible(s).', 'warning', 4000);
+      if (resteProd === 0) showStockAlert('Désolé, ce produit est épuisé !');
+      else showStockAlert('Désolé, il ne reste que '+resteProd+' article(s) disponible(s).');
       if (addBtn) addBtn._adding = false;
       return;
     }
