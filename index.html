@@ -47,7 +47,15 @@ html, body { background: var(--dark) !important; color: var(--text); font-family
 body > *:not(#loading):not(#app-bg):not(nav):not(#m-product):not(#m-auth):not(.toast-wrap) { position:relative; z-index:1; }
 
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); }
+@keyframes pulsePresence {
+  0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,.6); border-color: #10b981; }
+  50% { box-shadow: 0 0 0 8px rgba(16,185,129,0); border-color: #34d399; }
+}
+.presence-alert {
+  animation: pulsePresence 1.4s ease infinite;
+  border: 2px solid #10b981 !important;
+} }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
@@ -758,6 +766,17 @@ function startFirebaseListeners() {
         }
       } else if (update.status === 'picked_up') {
         toast('✅ '+update.body, 'success', 5000);
+      } else if (update.status === 'client_present') {
+        // Client signale sa présence → alerte sonore + toast persistant
+        toast('📍 '+update.title+' — '+update.body, 'success', 10000);
+        playAdminAlert();
+        if (navigator.vibrate) navigator.vibrate([200,100,200,100,200]);
+        // Rafraîchir l'UI admin pour afficher le badge
+        var ac2 = document.getElementById('admin-content');
+        var activeTab2 = document.querySelector('.admin-tab.active');
+        if (ac2 && activeTab2 && activeTab2.textContent.indexOf('Commandes') >= 0) {
+          ac2.innerHTML = adminOrders();
+        }
       } else {
         // Message admin / offre / relance
         toast('📣 '+update.title+' : '+update.body, 'info', 8000);
@@ -2823,6 +2842,46 @@ function renderOrders(){
   html+='</div>';
   sc.innerHTML=html;
 }
+function clientSignalPresence(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Envoi..."; }
+  // 1. Mettre à jour Firebase
+  db.ref("data/ba_orders/" + orderId + "/clientPresent").set(true)
+    .then(function() {
+      // 2. Mettre à jour localStorage
+      var orders = getOrders();
+      var o = orders.find(function(x){ return x.id === orderId; });
+      if (o) {
+        o.clientPresent = true;
+        try { localStorage.setItem("_ba_ba_orders", JSON.stringify(orders)); } catch(e) {}
+      }
+      // 3. Feedback visuel immédiat
+      if (btn) {
+        btn.textContent = "✅ Signalé ! L'équipe a été prévenue.";
+        btn.style.background = "rgba(16,185,129,.1)";
+        btn.style.borderColor = "#10b981";
+        btn.style.color = "#10b981";
+      }
+      toast("Votre présence a été signalée ! 📍", "success", 4000);
+      // 4. Notifier les admins via status_updates
+      var admins = getUsers().filter(function(u){ return u.role==="superadmin"||u.role==="admin"||u.role==="preparateur"; });
+      var clientName = (getUsers().find(function(u){ return u.id===(o&&o.userId); })||{}).prenom || (o&&o.userPrenom) || "Client";
+      admins.forEach(function(a){
+        db.ref("status_updates/" + a.id + "/presence-" + orderId).set({
+          status: "client_present",
+          orderId: orderId,
+          orderNumber: o ? o.orderNumber : "",
+          title: "📍 " + clientName + " est arrivé !",
+          body: "Le client est au point de retrait.",
+          at: new Date().toISOString()
+        });
+      });
+    })
+    .catch(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = "📍 Je suis arrivé au point de retrait"; }
+      toast("Erreur, veuillez réessayer.", "error");
+    });
+}
+
 function clientCancelOrder(orderId) {
   // Chercher la commande
   var o = getOrders().find(function(x){ return x.id === orderId; });
@@ -2937,6 +2996,14 @@ function orderCard(o){
   // Annulation possible seulement si pending ou confirmed
   if(o.status==='pending'||o.status==='confirmed'){
     html+='<button class="btn btn-sm btn-full mt-2" style="background:rgba(239,68,68,.12);border:1px solid #ef4444;color:#ef4444" data-oid="'+o.id+'" onclick="clientCancelOrder(this.dataset.oid)">❌ Annuler ma commande</button>';
+  }
+  // Bouton présence : visible uniquement si statut 'ready'
+  if(o.status==='ready'){
+    if(o.clientPresent){
+      html+='<button class="btn btn-sm btn-full mt-2" disabled style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;opacity:.8">✅ Signalé ! L\'équipe a été prévenue.</button>';
+    } else {
+      html+='<button class="btn btn-primary btn-sm btn-full mt-2" data-oid="'+o.id+'" onclick="clientSignalPresence(this.dataset.oid,this)">📍 Je suis arrivé au point de retrait</button>';
+    }
   }
   html+='</div>';
   return html;
@@ -4085,7 +4152,8 @@ function adminOrders(){
     html+='<div class="card mb-2">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">'
       +'<span class="font-head fw-800">N&deg;'+o.orderNumber+'</span>'
-      +'<span class="status-badge" style="background:'+st.color+'22;color:'+st.color+'">'+st.icon+' '+st.label+'</span></div>'
+      +'<span class="status-badge" style="background:'+st.color+'22;color:'+st.color+'">'+st.icon+' '+st.label+'</span>'
+      +(o.clientPresent&&o.status==='ready'?'<span style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid #10b981;border-radius:100px;font-size:.7rem;font-weight:700;padding:.15rem .55rem">&#128205; CLIENT ARRIV&#201;</span>':'')+'</div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">'
       +'<span class="fw-700">'+o.userPrenom+'</span>'
       +'<span class="text-sm text-muted">&#128222; '+o.userPhone+'</span></div>'
