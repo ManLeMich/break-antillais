@@ -593,18 +593,21 @@ function loadFromFirebase(cb) {
           val = Object.values(val).filter(function(v){ return v && typeof v === 'object'; });
         }
       }
-      // Pour ba_orders : fusionner avec localStorage au lieu d'écraser
+      // Pour ba_orders : Firebase est la source de vérité
+      // Fusionner uniquement si localStorage a des commandes récentes non encore dans Firebase
       if (k === 'ba_orders' && Array.isArray(val)) {
         try {
           var existing = JSON.parse(localStorage.getItem('_ba_ba_orders')||'[]');
           if (!Array.isArray(existing)) existing = [];
-          var merged = existing.slice();
-          val.forEach(function(o){
+          // Partir de Firebase (source de vérité) et ajouter les commandes locales non encore sync
+          var merged = val.slice();
+          existing.forEach(function(o){
             if (!o || !o.id) return;
-            var i = merged.findIndex(function(x){ return x && x.id === o.id; });
-            if (i >= 0) merged[i] = o; else merged.push(o);
+            var inFirebase = val.findIndex(function(x){ return x && x.id === o.id; });
+            if (inFirebase < 0) merged.push(o); // commande locale pas encore dans Firebase
           });
           localStorage.setItem('_ba_ba_orders', JSON.stringify(merged));
+          console.log('[BA] loadFromFirebase: '+merged.length+' commandes chargées');
         } catch(e) { try { localStorage.setItem('_ba_'+k, JSON.stringify(val)); } catch(e2) {} }
         return;
       }
@@ -642,6 +645,9 @@ function startFirebaseListeners() {
     // Protéger contre un objet vide qui écraserait les commandes
     if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return;
     var newOrders = Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.id; });
+    // Relire user/isAdmin à chaque déclenchement (pas capturé au démarrage)
+    var user = getCurrentUser();
+    var isAdmin = user && (user.role==='superadmin'||user.role==='admin'||user.role==='entreprise'||user.role==='preparateur');
     var oldOrdersStr = localStorage.getItem('_ba_ba_orders');
     var _oldRaw = oldOrdersStr ? JSON.parse(oldOrdersStr) : [];
     var oldOrders = Array.isArray(_oldRaw) ? _oldRaw : Object.values(_oldRaw || {}).filter(function(x){ return x && typeof x === 'object'; });
@@ -725,12 +731,16 @@ function startFirebaseListeners() {
         }
       }
     }
-    if (currentScreen === 'profile' && isAdmin) {
+    if (isAdmin) {
+      // Rafraîchir l'UI admin quel que soit l'écran actuel
       var ac = document.getElementById('admin-content');
       var activeTab = document.querySelector('.admin-tab.active');
       if (ac && activeTab) {
         if (activeTab.textContent.indexOf('Commandes') >= 0) ac.innerHTML = adminOrders();
         if (activeTab.textContent.indexOf('Dashboard') >= 0) ac.innerHTML = adminDashboard();
+      } else if (ac && currentScreen === 'profile') {
+        // Aucun onglet actif trouvé - forcer le rendu des commandes
+        ac.innerHTML = adminOrders();
       }
     }
   });
@@ -1507,6 +1517,17 @@ function doLogin() {
   // Attach notification listener for this user
   attachClientNotifListener(user);
   osSubscribe(user.id);
+  // Pour les admins : recharger les commandes depuis Firebase immédiatement
+  var loginIsAdmin = user.role==='superadmin'||user.role==='admin'||user.role==='entreprise'||user.role==='preparateur';
+  if (loginIsAdmin) {
+    db.ref('data/ba_orders').once('value').then(function(snap){
+      var v = snap.val();
+      if (!v) return;
+      var orders = Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x&&x.id; });
+      try { localStorage.setItem('_ba_ba_orders', JSON.stringify(orders)); } catch(e) {}
+      console.log('[BA] Admin connecté : '+orders.length+' commandes rechargées depuis Firebase');
+    });
+  }
   toast('Bienvenue '+user.prenom+' ! 🌴','success');
 }
 function doRegister() {
