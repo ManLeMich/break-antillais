@@ -948,7 +948,7 @@ var DEFAULT_PRODUCTS = [
   {id:'mb4',cat:'mini_bokit',name:'Box 40+ Mini Bokit',price:0,desc:'Commande speciale — contactez-nous directement',ok:true,boxType:'box40',maxSaveurs:5,qty:40,contactOnly:true},
   {id:'e1',cat:'enfant',name:'Menu Enfant Bokit',price:5.00,desc:'1 mini bokit + 1 boisson',ok:true},
   {id:'e2',cat:'enfant',name:'Menu Enfant Crepe',price:4.50,desc:'1 crepe sucree + 1 boisson',ok:true},
-  {id:'e3',cat:'enfant',name:'Menu Enfant Complet',price:6.50,desc:'1 mini bokit + 1 crepe sucree + 1 boisson',ok:true}
+  {id:'ea1',cat:'enfant_agoulou',name:'Menu Enfant Agoulou',price:7.00,desc:'1 agoulou enfant + 1 boisson',ok:false,stock:null,stockAlert:3}
 ];
 
 var DEFAULT_CFG = {
@@ -1996,7 +1996,7 @@ function continueOpenProduct(id) {
   _pendingQty = 1;
   var mc = getMeatCount(p);
   var isBox = p.cat === 'mini_bokit';
-  var needsConfig = ['bokit','crepe_salee','agoulou'].indexOf(p.cat)>=0;
+  var needsConfig = ['bokit','crepe_salee','agoulou','enfant','enfant_agoulou'].indexOf(p.cat)>=0;
   var pSafeName = (p.name || '').replace(/\'/g, '');
   var modalVisualHtml = (p.image && p.image.indexOf('__firebase__') !== 0)
     ? '<img src="'+p.image+'" alt="'+p.name+'" onclick="showPhotoFullscreen(this.src,\''+pSafeName+'\')" style="width:84px;height:84px;object-fit:cover;border-radius:14px;display:block;margin:0 auto .55rem;cursor:zoom-in;border:1px solid var(--border)"/>'
@@ -2206,6 +2206,9 @@ function toggleSupp(btn) {
 }
 
 function getMeatCount(p) {
+  // Menu enfant agoulou et enfant bokit : 1 viande
+  if (p.cat === 'enfant_agoulou') return 1;
+  if (p.cat === 'enfant') return 1;
   var n=p.name.toLowerCase();
   if(n.includes('4 viande'))return 4;
   if(n.includes('3 viande'))return 3;
@@ -2652,6 +2655,7 @@ function confirmOrder(){
           for (var ri = cart.length-1; ri >= 0 && excess > 0; ri--) { if(cart[ri].cat==='agoulou'){cart.splice(ri,1);excess--;} }
         }
       }
+
       if (!stockError) {
         var byPid = {};
         cart.forEach(function(i){ byPid[i.pid||i.id]=(byPid[i.pid||i.id]||0)+(i.qty||1); });
@@ -3031,6 +3035,7 @@ function clientConfirmCancel(orderId) {
         });
       }
     }
+
     closeModal('m-product');
     toast('Commande annulée.', 'info', 4000);
     // Notifier l'admin
@@ -3913,8 +3918,8 @@ function renderManualOrderModal() {
   var cfg = getCfg();
   var today = new Date().toISOString().split('T')[0];
   var slots = getSlots(today, cfg);
-  var CAT_LABELS = {bokit:'🫓 Bokits',agoulou:'🌯 Agoulous',crepe_salee:'🥞 Crêpes Salées',crepe_sucree:'🍫 Crêpes Sucrées',mini_bokit:'📦 Mini Bokits',enfant:'🧒 Enfants',boisson:'🥤 Boissons'};
-  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','enfant','boisson'];
+  var CAT_LABELS = {bokit:'🫓 Bokits',agoulou:'🌯 Agoulous',crepe_salee:'🥞 Crêpes Salées',crepe_sucree:'🍫 Crêpes Sucrées',mini_bokit:'📦 Mini Bokits',enfant:'🧒 Enfants',enfant_agoulou:'🌯🧒 Enfant Agoulou',boisson:'🥤 Boissons'};
+  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','enfant','enfant_agoulou','boisson'];
   var products = getProducts().filter(function(p){ return p.ok !== false; });
   var bycat = {};
   products.forEach(function(p){ if (!bycat[p.cat]) bycat[p.cat]=[]; bycat[p.cat].push(p); });
@@ -3949,7 +3954,7 @@ function renderManualOrderModal() {
     if (!bycat[cat]||!bycat[cat].length) return;
     prodsHtml += '<div style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;margin:.75rem 0 .3rem">'+(CAT_LABELS[cat]||cat)+'</div>';
     bycat[cat].forEach(function(p){
-      var needsConfig = ['bokit','crepe_salee','agoulou'].indexOf(p.cat)>=0;
+      var needsConfig = ['bokit','crepe_salee','agoulou','enfant','enfant_agoulou'].indexOf(p.cat)>=0;
       prodsHtml += '<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid rgba(255,255,255,.05)">';
       prodsHtml += '<div style="flex:1;font-size:.85rem">'+p.name+'<span style="color:var(--gold);font-size:.75rem;margin-left:.4rem">'+p.price.toFixed(2)+'€</span></div>';
       if (needsConfig) {
@@ -4816,7 +4821,7 @@ function prodForm(p){
     +'<input class="form-input" id="pf-p" type="number" step="0.01" value="'+(p.price||'')+'"/></div>'
     +'<div class="form-group"><label class="form-label">Description</label><input class="form-input" id="pf-d" value="'+(p.desc||'')+'"/></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="pf-ok"'+(p.ok?' checked':'')+' style="accent-color:var(--red)"> Disponible</label></div>'
-  +(p.cat==='boisson'||p.cat==='agoulou'||!p.cat?'<div class="form-group"><label class="form-label">'+(p.cat==='agoulou'?'📦 Stock pains agoulou (partagé entre toutes les variantes)':'Stock (laisser vide = illimité)')+'</label>'
+  +(p.cat==='boisson'||p.cat==='agoulou'||p.cat==='enfant_agoulou'||!p.cat?'<div class="form-group"><label class="form-label">'+(p.cat==='agoulou'?'📦 Stock pains agoulou (partagé entre toutes les variantes)':p.cat==='enfant_agoulou'?'🌯🧒 Stock Menu Enfant Agoulou':'Stock (laisser vide = illimité)')+'</label>'
     +'<div style="display:flex;gap:.5rem">'
     +'<input class="form-input" id="pf-stock" type="number" min="0" placeholder="Ex: 24" value="'+(p.stock!==null&&p.stock!==undefined?p.stock:'')+'" style="flex:2"/>'
     +'<input class="form-input" id="pf-stock-alert" type="number" min="0" placeholder="Alerte à" value="'+(p.stockAlert||3)+'" style="flex:1"/>'
