@@ -14,7 +14,6 @@
 <title>Break Antillais</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <style>
@@ -3298,18 +3297,46 @@ function renderProfile(){
     +'<div class="text-sm text-muted">'+user.email+'</div>'
     +'<div class="text-sm text-muted">📱 '+user.phone+'</div></div></div>';
   // Points
-  html+='<div class="pts-card mb-2">'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative">'
-    +'<div><div class="text-sm" style="opacity:.65;margin-bottom:.2rem">Points fidelite</div>'
-    +'<div class="pts-value">'+pts+'</div>'
-    +'<div style="font-size:.78rem;color:rgba(240,236,228,.55);margin-top:.15rem">points</div></div>'
-    +'<div style="text-align:right"><div style="font-size:2rem">'+palier.icon+'</div>'
-    +'<div style="font-weight:800;font-size:.88rem;color:'+palier.color+'">'+palier.name+'</div></div></div>'
+  // Calculer pts restants avant prochain palier (correction NaN)
+  var nextPSeuil = nextP ? (nextP.pts||nextP.min||0) : 0;
+  var ptsRestants = nextP ? Math.max(0, nextPSeuil - pts) : 0;
+  var curSeuil = palier.pts||palier.min||0;
+  var progressBar = nextP && (nextPSeuil - curSeuil) > 0
+    ? Math.min(100, Math.round((pts - curSeuil) / (nextPSeuil - curSeuil) * 100))
+    : 100;
 
-    +(nextP?'<div style="margin-top:.85rem;position:relative">'
-      +'<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:.3rem;opacity:.7"><span>Vers '+nextP.icon+' '+nextP.name+'</span><span>'+(nextP.min-pts)+' pts restants</span></div>'
-      +'<div style="background:rgba(255,255,255,.1);border-radius:100px;height:10px">'
-      +'<div style="background:'+nextP.color+';width:'+progress+'%;height:100%;border-radius:100px;transition:width .5s ease"></div></div></div>':'')
+  html += '<div class="pts-card mb-2" style="position:relative;overflow:hidden">'
+    // Fond décoratif
+    +'<div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:'+palier.color+';opacity:.07"></div>'
+    +'<div style="position:absolute;bottom:-30px;left:-10px;width:80px;height:80px;border-radius:50%;background:'+palier.color+';opacity:.05"></div>'
+    // En-tête
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">'
+    +'<div>'
+    +'<div style="font-size:.72rem;font-weight:600;letter-spacing:.08em;opacity:.6;text-transform:uppercase;margin-bottom:.3rem">Points fidélité</div>'
+    +'<div style="display:flex;align-items:baseline;gap:.3rem">'
+    +'<div style="font-family:var(--head);font-size:3rem;font-weight:900;line-height:1;color:'+palier.color+'">'+pts+'</div>'
+    +'<div style="font-size:.8rem;opacity:.6;font-weight:600">pts</div>'
+    +'</div></div>'
+    +'<div style="text-align:right;background:rgba(255,255,255,.06);border-radius:12px;padding:.5rem .75rem">'
+    +'<div style="font-size:1.8rem;line-height:1">'+palier.icon+'</div>'
+    +'<div style="font-weight:800;font-size:.82rem;color:'+palier.color+';margin-top:.15rem">'+palier.name+'</div>'
+    +'</div></div>'
+    // Barre de progression
+    +(nextP
+      ? ''
+        +'<div style="margin-bottom:.4rem;display:flex;justify-content:space-between;align-items:center">'
+        +'<span style="font-size:.72rem;font-weight:700;opacity:.7">Vers '+nextP.icon+' '+nextP.name+'</span>'
+        +'<span style="font-size:.72rem;font-weight:800;color:'+nextP.color+'">'+ptsRestants+' pts restants</span>'
+        +'</div>'
+        +'<div style="background:rgba(255,255,255,.1);border-radius:100px;height:12px;overflow:hidden">'
+        +'<div style="height:100%;border-radius:100px;width:'+progressBar+'%;'
+        +'background:linear-gradient(90deg,'+palier.color+','+nextP.color+');'
+        +'box-shadow:0 0 8px '+nextP.color+'66;transition:width .6s ease"></div></div>'
+        +'<div style="text-align:center;font-size:.68rem;opacity:.5;margin-top:.25rem">'+progressBar+'% accompli</div>'
+      : '<div style="text-align:center;padding:.3rem 0">'
+        +'<div style="font-size:.78rem;font-weight:700;color:'+palier.color+'">✨ Palier maximum atteint !</div>'
+        +'</div>'
+    )
     +'</div>';
   // ── Programme fidélité unifié ──
   var _palList=load('ba_paliers',PALIERS);
@@ -4144,9 +4171,8 @@ function submitManualOrder() {
   _manualOrderData.linkedUserId = null;
   _manualCart = [];
   closeModal('m-product');
-  toast('Commande confirmée ! 🌴','success',3000);
+  toast('Commande N°'+num+' confirmée pour '+prenom+' ! 🌴','success',4000);
   document.getElementById('admin-content').innerHTML = adminOrders();
-  showManualOrderMsg(order, cfg);
 }
 
 function showManualOrderMsg(order, cfg) {
@@ -5204,12 +5230,6 @@ function adminMarketCodes() {
   html += '<div class="form-group"><label class="form-label">🔍 Rechercher par nom ou téléphone</label>';
   html += '<input class="form-input" id="mc-phone-search" placeholder="Nom ou numéro..." oninput="mcSearchPhone(this.value)" style="background:var(--dark3)"/>';
   html += '<div id="mc-phone-results" style="margin-top:.3rem"></div></div>';
-  // Bouton scanner QR
-  html += '<div style="margin-bottom:.75rem">';
-  html += '<button class="btn btn-secondary btn-full" style="border:1px solid #f59e0b;color:#f59e0b;background:rgba(245,158,11,.08)" onclick="mcStartQrScan()">';
-  html += '📷 Scanner le QR Code client</button>';
-  html += '<div id="mc-qr-reader" style="display:none;margin-top:.5rem"></div>';
-  html += '</div>';
   // Client sélectionné
   html += '<div id="mc-selected" style="display:none;padding:.5rem .75rem;background:rgba(16,185,129,.1);border:1px solid #10b981;border-radius:8px;margin-bottom:.75rem;font-size:.85rem"></div>';
   html += '<input type="hidden" id="mc-user" value=""/>';
@@ -5284,123 +5304,6 @@ function mcSearchPhone(val) {
 
 
 // ── Scanner QR Code (caméra) ──
-var _qrStream = null;
-
-function mcStartQrScan() {
-  var container = document.getElementById('mc-qr-reader');
-  if (!container) return;
-  container.style.display = 'block';
-  container.innerHTML = '<video id="mc-qr-video" style="width:100%;border-radius:8px;max-height:220px;object-fit:cover"></video>'
-    + '<canvas id="mc-qr-canvas" style="display:none"></canvas>'
-    + '<div id="mc-qr-status" style="text-align:center;font-size:.8rem;color:var(--muted);margin-top:.3rem">Pointez la caméra vers le QR Code du client...</div>'
-    + '<button class="btn btn-secondary btn-sm btn-full" style="margin-top:.5rem" onclick="mcStopQrScan()">✕ Annuler</button>';
-
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    container.innerHTML = '<div class="text-sm" style="color:#ef4444;padding:.5rem">Caméra non disponible sur cet appareil.</div>';
-    return;
-  }
-
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    .then(function(stream) {
-      _qrStream = stream;
-      var video = document.getElementById('mc-qr-video');
-      if (!video) return;
-      video.srcObject = stream;
-      video.setAttribute('playsinline', true);
-      video.play();
-      requestAnimationFrame(function tick() {
-        if (!document.getElementById('mc-qr-video')) return; // stoppé
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          var canvas = document.getElementById('mc-qr-canvas');
-          if (!canvas) return;
-          canvas.height = video.videoHeight;
-          canvas.width = video.videoWidth;
-          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-          var imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-          // jsQR si disponible
-          if (window.jsQR) {
-            var code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) {
-              mcHandleQrResult(code.data);
-              return;
-            }
-          }
-        }
-        requestAnimationFrame(tick);
-      });
-    })
-    .catch(function(e) {
-      var container2 = document.getElementById('mc-qr-reader');
-      if (container2) container2.innerHTML = '<div class="text-sm" style="color:#ef4444;padding:.5rem">Accès caméra refusé : ' + e.message + '</div>';
-    });
-}
-
-function mcStopQrScan() {
-  if (_qrStream) { _qrStream.getTracks().forEach(function(t){ t.stop(); }); _qrStream = null; }
-  var c = document.getElementById('mc-qr-reader');
-  if (c) { c.style.display = 'none'; c.innerHTML = ''; }
-}
-
-function mcHandleQrResult(data) {
-  mcStopQrScan();
-  // QR client = "BA-{userId}"
-  var userId = null;
-  if (data.indexOf('BA-') === 0) {
-    userId = data.replace('BA-', '');
-  } else {
-    // Essayer comme URL contenant l'id
-    var m = data.match(/[?&]uid=([^&]+)/);
-    if (m) userId = m[1];
-  }
-  if (!userId) {
-    toast('QR Code non reconnu', 'error');
-    return;
-  }
-  // Chercher le client
-  var user = getUsers().find(function(u){ return u.id === userId; });
-  if (user) {
-    mcSelectClientObj(user);
-    toast('Client trouvé : ' + user.prenom + ' ✅', 'success', 3000);
-  } else {
-    // Chercher dans Firebase
-    db.ref('data/users/' + userId).once('value').then(function(snap) {
-      var u = snap.val();
-      if (u && u.id) {
-        mcSelectClientObj(u);
-        toast('Client trouvé : ' + u.prenom + ' ✅', 'success', 3000);
-      } else {
-        toast('Client introuvable dans la base', 'error');
-      }
-    });
-  }
-}
-
-function mcSelectClientObj(user) {
-  document.getElementById('mc-user').value = user.id;
-  var sel = document.getElementById('mc-selected');
-  if (sel) {
-    var p = getPalier(user.points || 0);
-    sel.innerHTML = '✅ <strong>' + user.prenom + '</strong>'
-      + (user.phone ? ' · ' + user.phone : '')
-      + ' · <span style="color:var(--gold)">' + (user.points||0) + ' pts</span>'
-      + ' · <span style="color:' + p.color + '">' + p.icon + ' ' + p.name + '</span>'
-      + ' <button onclick="mcUnselectClient()" style="margin-left:.5rem;background:none;border:none;color:var(--muted);cursor:pointer">✕</button>';
-    sel.style.display = 'block';
-  }
-  // Vider la recherche
-  var srEl = document.getElementById('mc-phone-search');
-  var resEl = document.getElementById('mc-phone-results');
-  if (srEl) srEl.value = '';
-  if (resEl) resEl.innerHTML = '';
-  var btn = document.getElementById('mc-action-btn');
-  if (btn) btn.textContent = 'Créditer les points directement';
-}
-
-function mcUnselectClient() {
-  document.getElementById('mc-user').value = '';
-  var sel = document.getElementById('mc-selected');
-  if (sel) sel.style.display = 'none';
-}
 
 function mcSelectClient(uid) {
   var u = getUsers().find(function(x){ return x.id===uid; });
