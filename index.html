@@ -1696,7 +1696,15 @@ function renderHome() {
   html += '<p style="font-size:.88rem;color:var(--muted);margin-bottom:.75rem">Bokit · Agoulou · Crepes</p>';
   if (user) html += '<p style="font-weight:600">Bonjour <span style="color:var(--red)">'+user.prenom+'</span> 👋</p>';
   html += '<div style="margin-top:.75rem">';
-  html += '<span style="display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .8rem;border-radius:100px;font-size:.75rem;font-weight:700;background:'+(open?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)')+';color:'+(open?'#10b981':'#ef4444')+'">'+(open?'🟢 Commandes ouvertes jusqu&apos;a '+cfg.cutoff:'🔴 Commandes du jour fermees')+'</span>';
+  // N'afficher le badge statut que si pas de fermeture exceptionnelle
+  if (!todayClosed) {
+    html += '<span style="display:inline-flex;align-items:center;gap:.4rem;'
+      +'padding:.25rem .8rem;border-radius:100px;font-size:.75rem;font-weight:700;'
+      +'background:'+(open?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)')
+      +';color:'+(open?'#10b981':'#ef4444')+'">'
+      +(open?'🟢 Commandes ouvertes jusqu&apos;a '+cfg.cutoff:'🔴 Commandes du jour fermees')
+      +'</span>';
+  }
   if (!open) html += '</div>'; // close margin-top
   html += '</div>'; // close hero
   // Not a work day message
@@ -1707,7 +1715,7 @@ function renderHome() {
       var nd = new Date(); nd.setDate(nd.getDate()+d);
       if (openDays.indexOf(nd.getDay())>=0) { nextWorkDay=nd; break; }
     }
-    html += '<div style="display:block;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem 1.1rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 1.1rem">Ferme le '+dayNames[todayDay]+' — ouverture '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
+    html += '<div style="display:block;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem 1.1rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 1.1rem">Ouvert du Mardi au Samedi — prochain service '+(nextWorkDay?dayNames[nextWorkDay.getDay()]+' '+nextWorkDay.toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'prochainement')+'</div>';
   } else if (todayClosed) {
     html += '<div style="display:block;box-sizing:border-box;text-align:center;font-size:.78rem;color:#f59e0b;padding:.4rem 1.1rem;font-weight:600;background:rgba(245,158,11,.1);border-radius:6px;margin:.35rem 1.1rem">Fermeture exceptionnelle — '+todayClosed.msg+'</div>';
   }
