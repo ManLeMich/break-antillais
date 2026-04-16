@@ -7568,7 +7568,7 @@ function showPlayoffsPopup(imgUrl) {
         + '<img src="' + imgUrl + '" style="width:100%;height:auto;border-radius:14px;display:block;box-shadow:0 20px 60px rgba(0,0,0,.9);pointer-events:none"/>'
         + '<button onclick="document.getElementById(\'playoffs-popup\').remove()" style="position:absolute;top:-14px;right:-14px;width:34px;height:34px;border-radius:50%;background:#C8232B;border:2px solid #fff;color:#fff;font-size:1.1rem;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1">✕</button>'
         + '<div style="text-align:center;margin-top:.85rem">'
-        + '<button onclick="document.getElementById(\'playoffs-popup\').remove();filterCat(\'mini_bokit\')" class="btn btn-primary" style="padding:.75rem 2.5rem;font-size:1rem;font-weight:800">🏀 Commander maintenant</button>'
+        + '<button onclick="document.getElementById(\'playoffs-popup\').remove();showPlayoffsBoxPicker()" class="btn btn-primary" style="padding:.75rem 2.5rem;font-size:1rem;font-weight:800">🏀 Commander maintenant</button>'
         + '</div></div>';
     } else {
       content = '<div style="position:relative;max-width:360px;width:100%;background:linear-gradient(135deg,#0a0a0a,#1a0a00);border:2px solid #D4AF37;border-radius:18px;padding:2rem 1.5rem;text-align:center">'
@@ -7581,7 +7581,7 @@ function showPlayoffsPopup(imgUrl) {
         + '<div style="background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.3);border-radius:10px;padding:.6rem .9rem;display:flex;justify-content:space-between"><span style="font-weight:700">Box 20</span><span style="color:#D4AF37;font-weight:800">🥤×2 + 20 pts</span></div>'
         + '<div style="background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.3);border-radius:10px;padding:.6rem .9rem;display:flex;justify-content:space-between"><span style="font-weight:700">Box 30</span><span style="color:#D4AF37;font-weight:800">🥤×3 + 30 pts</span></div>'
         + '</div>'
-        + '<button onclick="document.getElementById(\'playoffs-popup\').remove();filterCat(\'mini_bokit\')" class="btn btn-primary btn-full" style="padding:.75rem">🏀 Commander maintenant</button>'
+        + '<button onclick="document.getElementById(\'playoffs-popup\').remove();showPlayoffsBoxPicker()" class="btn btn-primary btn-full" style="padding:.75rem">🏀 Commander maintenant</button>'
         + '</div>';
     }
     overlay.innerHTML = content;
