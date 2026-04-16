@@ -1661,6 +1661,17 @@ function doLogout() {
 // HOME
 // ══════════════════════════════════════════════════════
 function renderHome() {
+  var _u = getCurrentUser();
+  var _isAdm = _u && (_u.role==='superadmin'||_u.role==='admin'||_u.role==='entreprise'||_u.role==='preparateur');
+  if (window._maintenanceMode && !_isAdm) {
+    var _sc = document.getElementById('s-home');
+    if (_sc) _sc.innerHTML = '<div style="padding:2rem 1.5rem;text-align:center">'
+      +'<div style="font-size:2.5rem;margin-bottom:.75rem">🔧</div>'
+      +'<div style="font-family:var(--head);font-size:1.3rem;font-weight:900;margin-bottom:.5rem">Fermeture temporaire</div>'
+      +'<div style="color:var(--muted);font-size:.9rem;line-height:1.6">'+(window._maintenanceMsg||'Nous revenons bientôt !')+'</div>'
+      +'</div>';
+    return;
+  }
   var sc = document.getElementById('home-body');
   if (!sc) return;
   var cfg = getCfg();
@@ -2462,6 +2473,12 @@ function editCartItem(id) {
 // CHECKOUT
 // ══════════════════════════════════════════════════════
 function showCheckout() {
+  var u = getCurrentUser();
+  var isAdm = u && (u.role==='superadmin'||u.role==='admin'||u.role==='entreprise'||u.role==='preparateur');
+  if (window._maintenanceMode && !isAdm) {
+    toast(window._maintenanceMsg || 'Commandes momentanément indisponibles.', 'error', 5000);
+    return;
+  }
   var cfg=getCfg();
   var now=new Date();
   var cp=cfg.cutoff.split(':');
@@ -2477,6 +2494,10 @@ function showCheckout() {
     && openDays.indexOf(dt.getDay()) >= 0
     && !closedDates.find(function(c){return c.date===dtStr;})) {
     dates.push({ value: dtStr, label: 'Aujourd&apos;hui' });
+  }
+  if (!dates.length) {
+    toast('Les commandes sont fermées pour aujourd\'hui. Revenez demain !', 'error', 5000);
+    return;
   }
   var _selDate = dates[0] ? dates[0].value : null;
   var total=cart.reduce(function(s,i){return s+i.price*i.qty;},0);
@@ -7560,9 +7581,9 @@ function startCountdown() {
     if (_initCfg.supplementPrice) SUPPLEMENT_PRICE = _initCfg.supplementPrice;
     SAUCES = getSauces();
     if (_initCfg.maintenance) {
-      document.getElementById('loading').style.display = 'none';
-      showMaintenanceScreen(_initCfg.maintenanceMsg || 'Nous revenons bientot !');
-      return;
+      // Laisser l'app se charger normalement
+      window._maintenanceMode = true;
+      window._maintenanceMsg = _initCfg.maintenanceMsg || 'Nous revenons bientôt !';
     }
     // Register Service Workers for background notifications
     if ('serviceWorker' in navigator) {
