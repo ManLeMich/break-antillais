@@ -961,6 +961,7 @@ var DEFAULT_CFG = {
   disabledSlots:[], // créneaux bloqués: ['19:00','19:30',...]
   maintenance:false, maintenanceMsg:'Nous revenons bientot !',
   playoffsActive:false,
+  playoffsImgUrl:'', // URL de l'affiche promo playoffs
   closedDates:[], // [{date:'2025-12-25', msg:'Ferme pour Noel'}]
   cgv:'CGV Break Antillais\nCommandes acceptees jusqu a 17h.\nRetrait 19h-22h.',
   rgpd:'Vos donnees sont utilisees uniquement pour la gestion des commandes.'
@@ -6386,6 +6387,15 @@ function removeClosedDate(i) {
   if(el) el.innerHTML = buildClosedDatesList();
   toast('Fermeture supprimee','info');
 }
+function savePlayoffsUrl() {
+  var url = (document.getElementById('playoffs-img-url')||{}).value||'';
+  var cfg = getCfg();
+  cfg.playoffsImgUrl = url.trim();
+  save('ba_cfg', cfg);
+  db.ref('data/ba_cfg').set(cfg);
+  toast('URL enregistrée !', 'success', 2000);
+}
+
 function togglePlayoffs() {
   var cfg = getCfg();
   cfg.playoffsActive = !cfg.playoffsActive;
@@ -6486,6 +6496,10 @@ function adminConfig(){
     +'<div><div class="fw-700" style="color:'+(cfg.playoffsActive?'#D4AF37':'var(--muted)')+'">'+(cfg.playoffsActive?'🏀 Offre Playoffs NBA ACTIVE':'🏀 Offre Playoffs NBA inactive')+'</div>'
     +'<div class="text-sm text-muted">'+(cfg.playoffsActive?'Boissons offertes + pts bonus sur les boxes':'Aucune offre spéciale en cours')+'</div></div>'
     +'<button class="btn btn-sm" style="background:'+(cfg.playoffsActive?'#92400e':'#78350f')+';color:#fff;border:1px solid #D4AF37" onclick="togglePlayoffs()">'+(cfg.playoffsActive?'Désactiver':'Activer')+'</button></div>'
+    +'<div class="form-group" style="margin-bottom:.75rem">'
+    +'<label class="form-label" style="font-size:.78rem">🖼️ URL de l\'affiche playoffs (affiché 5s au lancement)</label>'
+    +'<input class="form-input" id="playoffs-img-url" placeholder="https://..." value="'+(cfg.playoffsImgUrl||'')+'"/>'
+    +'<button class="btn btn-secondary btn-sm btn-full" style="margin-top:.35rem" onclick="savePlayoffsUrl()">Enregistrer l\'URL</button></div>'
     +'<div id="maint-msg-wrap"'+(cfg.maintenance?'':' style="display:none"')+'>'
     +'<div class="form-group"><label class="form-label">Message affiché</label>'
     +'<input class="form-input" id="cfg-maint-msg" value="'+(cfg.maintenanceMsg||'Nous revenons bientot !')+'"/>'
@@ -7416,6 +7430,26 @@ function shareReferral(code) {
   }
 }
 
+function showPlayoffsPopup(imgUrl) {
+  var existing = document.getElementById('playoffs-popup');
+  if (existing) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'playoffs-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .3s ease';
+  overlay.innerHTML = '<div style="position:relative;max-width:420px;width:100%">'
+    + '<img src="' + imgUrl + '" alt="Offre Playoffs" style="width:100%;border-radius:14px;display:block;box-shadow:0 20px 60px rgba(0,0,0,.8)"/>'
+    + '<button onclick="document.getElementById(\'playoffs-popup\').remove()" '
+    + 'style="position:absolute;top:-12px;right:-12px;width:32px;height:32px;border-radius:50%;background:#C8232B;border:none;color:#fff;font-size:1.1rem;cursor:pointer;font-weight:700;line-height:1">✕</button>'
+    + '<div style="text-align:center;margin-top:.75rem">'
+    + '<button onclick="document.getElementById(\'playoffs-popup\').remove();filterCat(\'mini_bokit\')" class="btn btn-primary" style="padding:.65rem 2rem;font-size:.95rem">🏀 Commander maintenant</button>'
+    + '</div>'
+    + '</div>';
+  // Fermer automatiquement après 5 secondes
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(function(){ var p=document.getElementById('playoffs-popup'); if(p) p.remove(); }, 5000);
+}
+
 function showMaintenanceScreen(msg) {
   var body = document.body;
   body.innerHTML = '<div style="position:fixed;inset:0;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;gap:1.5rem">'
@@ -7680,6 +7714,11 @@ function startCountdown() {
         ls.style.transition = 'opacity .4s ease';
         ls.style.opacity = '0';
         setTimeout(function(){ ls.style.display='none'; document.body.classList.add('app-ready'); }, 400);
+      }
+      // Affiche promo playoffs (si active)
+      var _pcfg = getCfg();
+      if (_pcfg.playoffsActive && _pcfg.playoffsImgUrl) {
+        setTimeout(function(){ showPlayoffsPopup(_pcfg.playoffsImgUrl); }, 600);
       }
     }, 1500);
     startOrderPolling();
