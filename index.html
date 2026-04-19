@@ -880,9 +880,14 @@ var DEFAULT_MEATS = [
   {name:'Thon',      price:6.50, ok:true}
 ];
 var SUPPLEMENT_PRICE = 0.50;
-function getMeats() {
+function getMeats(cat) {
   var m = load('ba_meats', DEFAULT_MEATS).slice();
-  return m.sort(function(a,b){ return a.name.localeCompare(b.name,'fr'); });
+  m = m.sort(function(a,b){ return a.name.localeCompare(b.name,'fr'); });
+  // Morue : uniquement Bokit Classique et Menu Enfant Bokit
+  if (cat && cat !== 'classique' && cat !== 'enfant_bokit') {
+    m = m.filter(function(x){ return x.name.toLowerCase().indexOf('morue') < 0; });
+  }
+  return m;
 }
 function getAvailableMeats() {
   return getMeats().filter(function(m){ return m.ok; });
@@ -2062,7 +2067,7 @@ function continueOpenProduct(id) {
     html += buildBoxConfigurator(p);
   } else if (p.isClassique) {
     // Bokit Classique - choose meat, price updates
-    var allMeats = getMeats();
+    var allMeats = getMeats('classique');
     html += '<div class="form-group"><label class="form-label">🥩 Choisissez votre viande</label>'
       +'<p class="text-sm text-muted mb-1">Le prix s&apos;adapte selon votre choix</p>'
       +'<div class="chips" id="meat-chips">';
@@ -2085,7 +2090,7 @@ function continueOpenProduct(id) {
     html += '<div class="form-group"><label class="form-label">➕ Supplement viande <span style="color:var(--gold)">+'+fmt(SUPPLEMENT_PRICE)+'/piece</span></label>'
       +'<div class="chips" id="supp-chips">';
     var allMeatsMapC = {};
-    getMeats().forEach(function(m){ allMeatsMapC[m.name] = m.ok; });
+    getMeats('supplement').forEach(function(m){ allMeatsMapC[m.name] = m.ok; });
     getSupplements().forEach(function(s){
       var unavail = allMeatsMapC[s] === false;
       html += '<button class="chip" data-v="'+s+'"'
@@ -2098,7 +2103,9 @@ function continueOpenProduct(id) {
   } else if (needsConfig) {
     if (mc>0) {
       html += '<div class="form-group"><label class="form-label">🥩 '+(mc>1?mc+' viandes':'Viande')+' au choix</label><div class="chips" id="meat-chips">';
-      getMeats().forEach(function(m){
+      // Pour Menu Enfant Bokit → Morue autorisée, sinon non
+      var _meatCat = (p.cat==='enfant' && p.name.toLowerCase().indexOf('bokit')>=0) ? 'enfant_bokit' : p.cat;
+      getMeats(_meatCat).forEach(function(m){
         var unavail = !m.ok;
         html += '<button class="chip" data-v="'+m.name+'"'
           +(unavail?' disabled style="opacity:.4;cursor:not-allowed;pointer-events:none"':' onclick="toggleMeat(this,'+mc+')"')+'>'
@@ -2110,7 +2117,7 @@ function continueOpenProduct(id) {
     html += '<div class="form-group"><label class="form-label">➕ Supplement viande <span style="color:var(--gold)">+'+fmt(SUPPLEMENT_PRICE)+'/piece</span></label>'
       +'<div class="chips" id="supp-chips">';
     var allMeatsMap = {};
-    getMeats().forEach(function(m){ allMeatsMap[m.name] = m.ok; });
+    getMeats('supplement').forEach(function(m){ allMeatsMap[m.name] = m.ok; });
     getSupplements().forEach(function(s){
       var unavail = allMeatsMap[s] === false;
       html += '<button class="chip" data-v="'+s+'"'
@@ -5376,6 +5383,31 @@ function mcSearchPhone(val) {
 
 
 // ── Scanner QR Code (caméra) ──
+
+function mcSelectClientObj(user) {
+  document.getElementById('mc-user').value = user.id;
+  var sel = document.getElementById('mc-selected');
+  if (sel) {
+    var p = getPalier(user.points || 0);
+    sel.innerHTML = '✅ <strong>' + user.prenom + '</strong>'
+      + (user.phone ? ' · ' + user.phone : '')
+      + ' · <span style="color:var(--gold)">' + (user.points||0) + ' pts</span>'
+      + ' · <span style="color:' + p.color + '">' + p.icon + ' ' + p.name + '</span>';
+    sel.style.display = 'block';
+  }
+  var srEl = document.getElementById('mc-phone-search');
+  var resEl = document.getElementById('mc-phone-results');
+  if (srEl) srEl.value = '';
+  if (resEl) resEl.innerHTML = '';
+  var btn = document.getElementById('mc-action-btn');
+  if (btn) btn.textContent = 'Créditer les points directement';
+}
+
+function mcUnselectClient() {
+  document.getElementById('mc-user').value = '';
+  var sel = document.getElementById('mc-selected');
+  if (sel) sel.style.display = 'none';
+}
 
 function mcSelectClient(uid) {
   var u = getUsers().find(function(x){ return x.id===uid; });
