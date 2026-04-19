@@ -3541,7 +3541,8 @@ function renderAdmin(role){
     +'<button class="admin-tab" onclick="adminTab(&apos;config&apos;,this)">⚙️ Config</button>'
     +'<button class="admin-tab" onclick="adminTab(&apos;invoices&apos;,this)">🧾 Factures</button>'
     +'<button class="admin-tab" onclick="adminTab(&apos;marketcodes&apos;,this)">🏪 Marche</button>'
-    +'<button class="admin-tab" onclick="adminTab(&apos;promocodes&apos;,this)">🎟 Promos</button>';
+    +'<button class="admin-tab" onclick="adminTab(&apos;promocodes&apos;,this)">🎟 Promos</button>'
+    +'<button class="admin-tab" style="background:rgba(212,175,55,.12);color:#D4AF37;border:1px solid rgba(212,175,55,.25)" onclick="openAnalytics()">📊 Analytics</button>';
   var roleLabel=isPrep?'Preparateur':isSup?'Super Admin':'Entreprise';
   return '<div class="header">'
     +'<div class="logo"><span class="logo-break">Break</span><span class="logo-antillais">Antillais</span></div>'
@@ -3552,6 +3553,11 @@ function renderAdmin(role){
     +'<div class="admin-tabs">'+tabs+'</div>'
     +'<div id="admin-content">'+adminOrders()+'</div></div>';
 }
+function openAnalytics() {
+  var url = "https://break-antillais.github.io/break-antillais/analytics.html";
+  window.open(url, "_blank");
+}
+
 function adminTab(tab, btn){
   document.querySelectorAll('.admin-tab').forEach(function(b){b.classList.remove('active');});
   btn.classList.add('active');
