@@ -218,11 +218,18 @@ function _doLoad(){
       if(!item) return;
       if(item.id){
         // Commande directe
+        // Normaliser items en array si objet Firebase
+        if(item.items && !Array.isArray(item.items)){
+          item.items = Object.values(item.items);
+        }
         merged[item.id] = item;
       } else if(typeof item === 'object'){
         // Sous-niveau (ex: ba_journal/{date}/{id} ou ba_archive/{mois}/{id})
         Object.values(item).forEach(function(o){
-          if(o && o.id) merged[o.id] = o;
+          if(o && o.id){
+            if(o.items && !Array.isArray(o.items)) o.items = Object.values(o.items);
+            merged[o.id] = o;
+          }
         });
       }
     });
@@ -274,7 +281,9 @@ function analyze(orders){
     caBySlot[slot] = (caBySlot[slot]||0)+(o.total||0);
     if(o.userId) clientFreq[o.userId]=(clientFreq[o.userId]||0)+1;
 
-    (o.items||[]).forEach(function(it){
+    // items peut être un array ou un objet Firebase {0:{...}, 1:{...}}
+    var itemsArr = o.items ? (Array.isArray(o.items) ? o.items : Object.values(o.items)) : [];
+    itemsArr.forEach(function(it){
       var nm = (it.name||'').toLowerCase();
       var cat = it.cat||'';
       var pid = it.pid||it.id||'';
@@ -296,25 +305,31 @@ function analyze(orders){
       if(nm.includes('menu')&&!nm.includes('enfant')) menus+=(it.qty||1);
 
       // Viandes dans les détails
+      var VIANDE_LIST = ['Poulet','Kebab','Merguez','Steak','Jambon','Saucisse','Thon','Morue','Ordinaire'];
       if(it.details){
         var viandeParts = it.details.split('|');
         viandeParts.forEach(function(part){
           part = part.trim();
-          if(part.toLowerCase().includes('viande')||part.toLowerCase().includes(':')) {
-            var vNames = part.replace(/viandes?[:\s]*/i,'').split(',');
-            vNames.forEach(function(v){
-              v = v.trim().replace(/\s*\(.*\)/,'');
-              if(v && v.length>1 && !v.toLowerCase().includes('sauce')&&!v.toLowerCase().includes('crudite')&&!v.toLowerCase().includes('supplement')) {
-                viandes[v]=(viandes[v]||0)+(it.qty||1);
-              }
+          // Chercher chaque viande connue dans la partie
+          VIANDE_LIST.forEach(function(v){
+            if(part.indexOf(v)>=0) viandes[v]=(viandes[v]||0)+(it.qty||1);
+          });
+          // Aussi parser 'Viandes: X, Y'
+          if(part.toLowerCase().indexOf('viande')>=0){
+            var afterColon = part.replace(/.*viandes?\s*[:\-]\s*/i,'');
+            afterColon.split(',').forEach(function(seg){
+              seg = seg.trim().replace(/حلال\s*/g,'').replace(/[^a-zA-ZÀ-ÿ\s]/g,'').trim();
+              VIANDE_LIST.forEach(function(v){
+                if(seg.toLowerCase().indexOf(v.toLowerCase())>=0) viandes[v]=(viandes[v]||0)+(it.qty||1);
+              });
             });
           }
-          // Viandes directes (ex: "Poulet", "Kebab")
-          ['Poulet','Kebab','Merguez','Steak','Jambon','Saucisse','Thon','Morue','Ordinaire'].forEach(function(v){
-            if(part.includes(v)) viandes[v]=(viandes[v]||0)+(it.qty||1);
-          });
         });
       }
+      // Aussi chercher dans le nom du produit
+      VIANDE_LIST.forEach(function(v){
+        if(nm.indexOf(v.toLowerCase())>=0) viandes[v]=(viandes[v]||0)+(it.qty||1);
+      });
 
       // Offres
       if(it.isPlayoffBonus) offres['Playoffs NBA']=(offres['Playoffs NBA']||0)+1;
