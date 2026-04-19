@@ -3554,7 +3554,9 @@ function renderAdmin(role){
     +'<div id="admin-content">'+adminOrders()+'</div></div>';
 }
 function openAnalytics() {
-  var url = "https://break-antillais.github.io/break-antillais/analytics.html";
+  var user = getCurrentUser();
+  var uid = user ? user.id : "";
+  var url = "https://break-antillais.github.io/break-antillais/analytics.html?uid="+encodeURIComponent(uid);
   window.open(url, "_blank");
 }
 
