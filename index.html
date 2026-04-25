@@ -7247,6 +7247,141 @@ function showOrderReadyAlert(order) {
   if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 500]);
 }
 
+// ══ EXPIRATION DES POINTS ══
+// Trimestres : T1=Jan-Mar, T2=Avr-Jun, T3=Jul-Sep, T4=Oct-Déc
+// Les points expirent le dernier jour du trimestre en cours + 1 trimestre
+
+function getPtsExpiryDate() {
+  // Calcule la prochaine date d'expiration des points
+  // = dernier jour du trimestre actuel
+  var now = new Date();
+  var m = now.getMonth(); // 0-11
+  var y = now.getFullYear();
+  var endMonth; // dernier mois du trimestre actuel (0-indexed)
+  if (m <= 2)       endMonth = 2;  // T1 : expire 31 mars
+  else if (m <= 5)  endMonth = 5;  // T2 : expire 30 juin
+  else if (m <= 8)  endMonth = 8;  // T3 : expire 30 sept
+  else              endMonth = 11; // T4 : expire 31 déc
+  // Dernier jour du mois endMonth
+  var expiry = new Date(y, endMonth + 1, 0); // jour 0 du mois suivant = dernier jour du mois
+  expiry.setHours(23, 59, 59, 0);
+  return expiry;
+}
+
+function getPtsExpiryStr(date) {
+  // "31 mars 2026"
+  return date.toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
+}
+
+function checkPointsExpiry(user) {
+  if (!user || !user.id) return;
+  if (!user.points || user.points <= 0) return;
+
+  var now = new Date();
+  var expiry = getPtsExpiryDate();
+  var msLeft = expiry.getTime() - now.getTime();
+  var daysLeft = Math.ceil(msLeft / 86400000);
+
+  // ── Expiration effective ──
+  // Vérifier si les points ont expiré depuis la dernière connexion
+  var lastExpKey = 'ba_pts_exp_done_'+user.id;
+  var lastExpDone = load(lastExpKey, null);
+  var expiryKey = expiry.toISOString().split('T')[0]; // clé unique par date d'expiration
+
+  if (lastExpDone !== expiryKey) {
+    // Vérifier dans Firebase si déjà expiré ce trimestre
+    db.ref('data/ba_pts_expired/'+user.id+'/'+expiryKey).once('value').then(function(snap){
+      if (snap.val()) {
+        save(lastExpKey, expiryKey); // marquer localement aussi
+        return;
+      }
+      // Pas encore expiré — les points actuels sont encore valides
+      // (l'expiration se fera le jour J)
+    });
+  }
+
+  // ── Alerte 10 jours avant ──
+  if (daysLeft > 10) return; // pas encore dans la zone d'alerte
+
+  // Vérifier si le client a coché "ne plus afficher" pour cette expiration
+  var dismissKey = 'ba_pts_exp_dismiss_'+user.id+'_'+expiryKey;
+  var dismissed = load(dismissKey, false);
+  if (dismissed) return;
+
+  // Vérifier si l'email d'alerte a déjà été envoyé pour cette expiration
+  var emailKey = 'ba_pts_exp_email_'+user.id+'_'+expiryKey;
+  db.ref('data/ba_pts_exp_email/'+user.id+'/'+expiryKey).once('value').then(function(snap){
+    if (!snap.val() && user.email) {
+      // Envoyer l'email d'alerte une seule fois
+      sendPointsExpiryEmail(user, user.points, expiry, daysLeft);
+      db.ref('data/ba_pts_exp_email/'+user.id+'/'+expiryKey).set(true);
+    }
+    // Afficher la modale d'alerte dans l'app
+    setTimeout(function(){
+      showPointsExpiryModal(user, user.points, expiry, daysLeft, dismissKey);
+    }, 1500);
+  });
+}
+
+function sendPointsExpiryEmail(user, pts, expiry, daysLeft) {
+  try {
+    if (typeof emailjs === 'undefined') return;
+    var expiryStr = getPtsExpiryStr(expiry);
+    emailjs.send('service_uez8gro', 'template_gs8itxh', {
+      email: user.email,
+      client_name: user.prenom,
+      order_number: 'POINTS-EXP',
+      items: '⚠️ Vos '+pts+' points fidélité expirent dans '+daysLeft+' jour'+(daysLeft>1?'s':''),
+      total: pts+' points à utiliser avant le '+expiryStr,
+      pickup_date: expiryStr,
+      pickup_time: '',
+      payment: 'Programme fidélité',
+      address: 'Commandez avant le '+expiryStr+' pour ne pas perdre vos points !'
+    }).catch(function(e){ console.warn('Expiry email:', e); });
+  } catch(e) {}
+}
+
+function showPointsExpiryModal(user, pts, expiry, daysLeft, dismissKey) {
+  var m = document.getElementById('m-product');
+  if (!m || m.style.display === 'block') return; // ne pas écraser une modale ouverte
+  var expiryStr = getPtsExpiryStr(expiry);
+  var urgent = daysLeft <= 3;
+  m.innerHTML = '<div class="modal-overlay">'
+    +'<div class="modal" style="max-width:340px">'
+    +'<div class="modal-handle"></div>'
+    +'<div style="text-align:center;margin-bottom:.75rem">'
+    +'<div style="font-size:2.5rem">'+(urgent?'🚨':'⚠️')+'</div>'
+    +'<h2 class="modal-title" style="color:'+(urgent?'#ef4444':'#f59e0b')+';font-size:1.1rem">'
+    +(urgent?'Vos points expirent bientôt !':'Points fidélité — expiration proche')+'</h2>'
+    +'</div>'
+    +'<div style="background:rgba(245,158,11,.1);border:1.5px solid #f59e0b;border-radius:12px;padding:1rem;margin-bottom:1rem;text-align:center">'
+    +'<div style="font-family:var(--head);font-size:2rem;font-weight:900;color:#f59e0b">'+pts+'</div>'
+    +'<div style="font-size:.8rem;color:var(--muted)">points expirent le</div>'
+    +'<div style="font-weight:800;color:var(--text);font-size:.9rem">'+expiryStr+'</div>'
+    +'<div style="font-size:.78rem;color:'+(urgent?'#ef4444':'#f59e0b')+';font-weight:700;margin-top:.3rem">'
+    +(daysLeft === 0 ? 'Aujourd\'hui !' : daysLeft === 1 ? 'Demain !' : 'Dans '+daysLeft+' jours')
+    +'</div>'
+    +'</div>'
+    +'<p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.5;text-align:center">'
+    +'Passez une commande avant cette date pour conserver vos points.</p>'
+    +'<button class="btn btn-primary btn-full" onclick="closeModal(&apos;m-product&apos;);go(&apos;home&apos;)" style="margin-bottom:.5rem">🛒 Commander maintenant</button>'
+    +'<label style="display:flex;align-items:center;gap:.5rem;justify-content:center;cursor:pointer;font-size:.78rem;color:var(--muted)">'
+    +'<input type="checkbox" id="exp-dismiss-cb" style="width:14px;height:14px"/>'
+    +'Ne plus afficher ce message'
+    +'</label>'
+    +'<button class="btn btn-secondary btn-full mt-1" data-dkey="'+dismissKey+'" onclick="dismissExpiryModal(this.dataset.dkey)">Fermer</button>'
+    +'</div></div>';
+  m.style.display = 'block';
+}
+
+function dismissExpiryModal(dismissKey) {
+  var cb = document.getElementById('exp-dismiss-cb');
+  if (cb && cb.checked) {
+    save(dismissKey, true); // ne plus afficher pour cette expiration
+  }
+  closeModal('m-product');
+}
+
 // ANNIVERSAIRE AUTO
 function checkBirthdayOffer(user) {
   if (!user || !user.id || !user.bday) return;
