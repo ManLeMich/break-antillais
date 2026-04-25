@@ -5592,18 +5592,17 @@ function redeemMarketCode(code) {
 // ═══ CODES PROMO / FIDELITE ═══
 function adminPromoCodes() {
   var html = '<div style="padding:.75rem">';
-  html += '<div class="sec-title">Codes Fidelite</div>';
-  html += '<p class="text-sm text-muted mb-2">Creez des codes promo a offrir a vos clients.</p>';
+  html += '<div class="sec-title">🎟 Codes Fidélité</div>';
   html += '<div class="card mb-2">';
-  html += '<div class="form-group"><label class="form-label">Code (laisser vide = auto)</label>';
-  html += '<input class="form-input" id="pc-code" placeholder="Ex: NOEL2025" style="text-transform:uppercase"/></div>';
-  html += '<div class="form-group"><label class="form-label">Points offerts</label>';
+  html += '<div class="form-group"><label class="form-label">Code (vide = généré auto)</label>';
+  html += '<input class="form-input" id="pc-code" placeholder="Ex: NOEL2025" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"/></div>';
+  html += '<div class="form-group"><label class="form-label">Points offerts *</label>';
   html += '<input class="form-input" id="pc-pts" type="number" min="1" placeholder="Ex: 50"/></div>';
-  html += '<div class="form-group"><label class="form-label">Limite d&apos;utilisation (0 = illimite)</label>';
-  html += '<input class="form-input" id="pc-limit" type="number" min="0" value="1" placeholder="Ex: 1"/></div>';
-  html += '<div class="form-group"><label class="form-label">Expire le (laisser vide = jamais)</label>';
+  html += '<div class="form-group"><label class="form-label">Limite d\'utilisation (0 = illimité)</label>';
+  html += '<input class="form-input" id="pc-limit" type="number" min="0" value="0"/></div>';
+  html += '<div class="form-group"><label class="form-label">Date d\'expiration (vide = jamais)</label>';
   html += '<input class="form-input" id="pc-expiry" type="date"/></div>';
-  html += '<button class="btn btn-primary btn-full" onclick="createPromoCode()">Creer le code</button>';
+  html += '<button class="btn btn-primary btn-full" onclick="createPromoCode()">✚ Créer le code</button>';
   html += '</div>';
   html += '<div class="sec-title">Codes existants</div>';
   html += '<div id="pc-list"><div class="text-sm text-muted">Chargement...</div></div>';
@@ -5636,24 +5635,85 @@ function loadPromoCodes() {
   var list = document.getElementById('pc-list');
   if (!list) return;
   db.ref('data/promo_codes').once('value').then(function(snap){
-    var codes = []; snap.forEach(function(s){ codes.push(s.val()); });
-    if (!codes.length) { list.innerHTML = '<div class="text-sm text-muted">Aucun code</div>'; return; }
+    var codes = [];
+    snap.forEach(function(s){ if(s.val()) codes.push(s.val()); });
+    if (!codes.length) {
+      list.innerHTML = '<div class="text-sm text-muted" style="padding:.5rem 0">Aucun code créé.</div>';
+      return;
+    }
+    codes.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
     var h = '';
-    codes.reverse().forEach(function(p){
+    codes.forEach(function(p){
       var expired = p.expiry && new Date(p.expiry) < new Date();
       var full = p.limit > 0 && p.used >= p.limit;
-      var status = !p.active||expired||full ? 'Inactif' : 'Actif';
-      var col = (!p.active||expired||full) ? 'var(--muted)' : '#10b981';
-      h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid var(--border)">'
-        +'<div><div class="fw-700" style="font-family:monospace;letter-spacing:.06em">'+p.code+'</div>'
-        +'<div class="text-muted" style="font-size:.75rem">+'+p.pts+' pts &bull; Utilise: '+p.used+'/'+(p.limit||'illim.')+(p.expiry?' &bull; exp: '+new Date(p.expiry).toLocaleDateString('fr-FR'):'')+' </div></div>'
-        +'<div style="display:flex;align-items:center;gap:.4rem">'
-        +'<span style="color:'+col+';font-weight:700;font-size:.75rem">'+status+'</span>'
-        +'<button class="btn btn-sm" style="padding:.2rem .4rem;font-size:.7rem;background:rgba(239,68,68,.15);border-color:#ef4444;color:#ef4444" data-code="'+p.code+'" onclick="deletePromoCode(this.dataset.code)">X</button>'
-        +'</div></div>';
+      var inactive = !p.active || expired || full;
+      var statusLabel = expired ? 'Expiré' : full ? 'Épuisé' : !p.active ? 'Désactivé' : 'Actif';
+      var statusCol = inactive ? '#ef4444' : '#10b981';
+      var expiryStr = p.expiry ? new Date(p.expiry).toLocaleDateString('fr-FR') : 'Jamais';
+      h += '<div style="background:var(--dark3);border-radius:10px;padding:.7rem .9rem;margin-bottom:.5rem;border:1px solid var(--border)">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">';
+      h += '<div style="font-family:monospace;font-weight:800;font-size:1rem;letter-spacing:.08em">'+p.code+'</div>';
+      h += '<span style="font-size:.72rem;font-weight:700;background:'+(inactive?'rgba(239,68,68,.12)':'rgba(16,185,129,.12)')+';color:'+statusCol+';border-radius:100px;padding:.15rem .55rem">'+statusLabel+'</span>';
+      h += '</div>';
+      h += '<div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">';
+      h += '<span style="color:var(--gold);font-weight:700">+'+p.pts+' pts</span>';
+      h += ' &bull; Utilisé: <strong>'+p.used+'</strong>/'+(p.limit > 0 ? p.limit : '∞');
+      h += ' &bull; Expire: '+expiryStr;
+      h += '</div>';
+      h += '<div style="display:flex;gap:.4rem">';
+      h += '<button class="btn btn-sm" style="flex:1;font-size:.75rem;background:rgba(212,175,55,.1);border-color:rgba(212,175,55,.3);color:#D4AF37" data-code="'+p.code+'" onclick="editPromoCode(this.dataset.code)">✏️ Modifier</button>';
+      h += '<button class="btn btn-sm" style="flex:1;font-size:.75rem;background:rgba(255,255,255,.05);border-color:var(--border);color:var(--muted)" data-code="'+p.code+'" data-active="'+(p.active?'1':'0')+'" onclick="togglePromoCode(this.dataset.code,this.dataset.active)">'+(!p.active?'✅ Activer':'⏸ Désactiver')+'</button>';
+      h += '<button class="btn btn-sm btn-danger" style="font-size:.75rem;padding:.3rem .6rem" data-code="'+p.code+'" onclick="deletePromoCode(this.dataset.code)">🗑</button>';
+      h += '</div></div>';
     });
     list.innerHTML = h;
-  }).catch(function(){ list.innerHTML = '<div class="text-sm text-muted">Erreur</div>'; });
+  }).catch(function(e){ list.innerHTML = '<div class="text-sm text-muted">Erreur: '+e.message+'</div>'; });
+}
+
+function editPromoCode(code) {
+  db.ref('data/promo_codes/'+code).once('value').then(function(snap){
+    var p = snap.val();
+    if (!p) return;
+    var m = document.getElementById('m-product');
+    m.innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
+      +'<div class="modal"><div class="modal-handle"></div>'
+      +'<h2 class="modal-title">✏️ Modifier '+code+'</h2>'
+      +'<div class="form-group"><label class="form-label">Points offerts</label>'
+      +'<input class="form-input" id="ep-pts" type="number" min="1" value="'+p.pts+'"/></div>'
+      +'<div class="form-group"><label class="form-label">Limite d\'utilisation (0 = illimité)</label>'
+      +'<input class="form-input" id="ep-limit" type="number" min="0" value="'+(p.limit||0)+'"/></div>'
+      +'<div class="form-group"><label class="form-label">Date d\'expiration (vide = jamais)</label>'
+      +'<input class="form-input" id="ep-expiry" type="date" value="'+(p.expiry||'')+'"/></div>'
+      +'<div class="form-group"><label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">'
+      +'<input type="checkbox" id="ep-active"'+(p.active?' checked':'')+' style="width:16px;height:16px"/>'
+      +'<span>Code actif</span></label></div>'
+      +'<button class="btn btn-primary btn-full" data-code="'+code+'" onclick="savePromoEdit(this.dataset.code)">Enregistrer</button>'
+      +'<button class="btn btn-secondary btn-full mt-1" onclick="closeModal(&apos;m-product&apos;)">Annuler</button>'
+      +'</div></div>';
+    m.style.display = 'block';
+  });
+}
+
+function savePromoEdit(code) {
+  var pts = parseInt(document.getElementById('ep-pts').value)||0;
+  var limit = parseInt(document.getElementById('ep-limit').value)||0;
+  var expiry = document.getElementById('ep-expiry').value || null;
+  var active = document.getElementById('ep-active').checked;
+  if (!pts) { toast('Points requis','error'); return; }
+  db.ref('data/promo_codes/'+code).update({pts:pts, limit:limit, expiry:expiry, active:active})
+    .then(function(){
+      closeModal('m-product');
+      toast('Code '+code+' modifié !','success');
+      loadPromoCodes();
+    }).catch(function(e){ toast('Erreur: '+e.message,'error'); });
+}
+
+function togglePromoCode(code, currentActive) {
+  var newActive = currentActive === '1' ? false : true;
+  db.ref('data/promo_codes/'+code+'/active').set(newActive).then(function(){
+    toast(code+(newActive?' activé':' désactivé'), newActive?'success':'info');
+    loadPromoCodes();
+  });
 }
 
 function deletePromoCode(code) {
@@ -5661,31 +5721,96 @@ function deletePromoCode(code) {
 }
 
 function redeemPromoCode(code) {
-  if (!code||!code.trim()) { toast('Entrez un code','error'); return; }
+  if (!code || !code.trim()) { showPromoError('Entrez un code valide.'); return; }
   var user = getCurrentUser();
-  if (!user) { toast('Connectez-vous','error'); return; }
+  if (!user) { toast('Connectez-vous pour utiliser un code','warning'); return; }
   var codeUp = code.trim().toUpperCase();
+  var btn = document.getElementById('promo-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
   db.ref('data/promo_codes/'+codeUp).once('value').then(function(snap){
     var p = snap.val();
-    if (!p||!p.active) { toast('Code invalide','error'); return; }
-    if (p.expiry && new Date(p.expiry) < new Date()) { toast('Code expire','error'); return; }
-    if (p.limit > 0 && p.used >= p.limit) { toast('Code epuise','error'); return; }
-    // Vérifier si ce user a déjà utilisé ce code
+    // Validations
+    if (!p || !p.active) {
+      showPromoError('Ce code est invalide ou inexistant.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+      return;
+    }
+    if (p.expiry && new Date(p.expiry) < new Date()) {
+      showPromoError('Ce code a expiré le '+new Date(p.expiry).toLocaleDateString('fr-FR')+'.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+      return;
+    }
+    if (p.limit > 0 && p.used >= p.limit) {
+      showPromoError('Ce code a atteint sa limite d\'utilisation.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+      return;
+    }
+    // Vérifier si ce client a déjà utilisé ce code
     db.ref('data/promo_uses/'+codeUp+'/'+user.id).once('value').then(function(usnap){
-      if (usnap.exists()) { toast('Vous avez deja utilise ce code','error'); return; }
-      // Appliquer
-      db.ref('data/promo_codes/'+codeUp+'/used').set((p.used||0)+1);
-      db.ref('data/promo_uses/'+codeUp+'/'+user.id).set(new Date().toISOString());
-      user.points = (user.points||0) + p.pts;
-      db.ref('data/users/'+user.id+'/points').set(user.points);
-      var hist = load('ba_pts_history_'+user.id,[]);
-      hist.unshift({pts:p.pts, label:'Code promo: '+codeUp, at:new Date().toISOString()});
-      save('ba_pts_history_'+user.id, hist);
-      saveUser(user); setCurrentUser(user);
-      toast('+'+p.pts+' points ! Code '+codeUp+' utilise.','success',4000);
-      renderProfile();
+      if (usnap.exists()) {
+        showPromoError('Vous avez déjà utilisé ce code sur votre compte.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+        return;
+      }
+      // ── Tout est valide — Appliquer de façon atomique ──
+      var updates = {};
+      updates['data/promo_codes/'+codeUp+'/used'] = (p.used||0) + 1;
+      updates['data/promo_uses/'+codeUp+'/'+user.id] = new Date().toISOString();
+      updates['data/users/'+user.id+'/points'] = (user.points||0) + p.pts;
+      db.ref().update(updates).then(function(){
+        // Mettre à jour le cache local
+        user.points = (user.points||0) + p.pts;
+        var hist = load('ba_pts_history_'+user.id, []);
+        hist.unshift({pts: p.pts, label: 'Code promo: '+codeUp, at: new Date().toISOString()});
+        save('ba_pts_history_'+user.id, hist);
+        saveUser(user);
+        setCurrentUser(user);
+        // Modale de succès
+        showPromoSuccess(p.pts, codeUp, user.points);
+        if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+      }).catch(function(e){
+        showPromoError('Erreur lors de l\'application du code. Réessayez.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+      });
+    }).catch(function(){
+      showPromoError('Erreur de vérification. Réessayez.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
     });
-  }).catch(function(){ toast('Erreur verification','error'); });
+  }).catch(function(){
+    showPromoError('Erreur de connexion. Vérifiez votre réseau.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Valider'; }
+  });
+}
+
+function showPromoError(msg) {
+  var m = document.getElementById('m-product');
+  m.innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal(&apos;m-product&apos;)">'
+    +'<div class="modal" style="text-align:center;max-width:320px">'
+    +'<div class="modal-handle"></div>'
+    +'<div style="font-size:2.5rem;margin-bottom:.5rem">❌</div>'
+    +'<h2 class="modal-title" style="color:#ef4444">Code invalide</h2>'
+    +'<p style="font-size:.9rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.5">'+msg+'</p>'
+    +'<button class="btn btn-primary btn-full" onclick="closeModal(&apos;m-product&apos;)">Fermer</button>'
+    +'</div></div>';
+  m.style.display = 'block';
+}
+
+function showPromoSuccess(pts, code, totalPts) {
+  var m = document.getElementById('m-product');
+  m.innerHTML = '<div class="modal-overlay">'
+    +'<div class="modal" style="text-align:center;max-width:320px">'
+    +'<div class="modal-handle"></div>'
+    +'<div style="font-size:3rem;margin-bottom:.5rem">🎉</div>'
+    +'<h2 class="modal-title" style="color:#10b981">Points ajoutés !</h2>'
+    +'<div style="background:rgba(16,185,129,.1);border:1px solid #10b981;border-radius:12px;padding:1rem;margin:.75rem 0">'
+    +'<div style="font-family:var(--head);font-size:2.5rem;font-weight:900;color:#10b981">+'+pts+'</div>'
+    +'<div style="font-size:.85rem;color:var(--muted)">points ajoutés à votre compte</div>'
+    +'</div>'
+    +'<div style="font-size:.8rem;color:var(--muted);margin-bottom:1.25rem">Code <strong style="font-family:monospace">'+code+'</strong> utilisé avec succès<br>Total : <strong style="color:var(--gold)">'+totalPts+' pts</strong></div>'
+    +'<button class="btn btn-primary btn-full" onclick="closeModal(&apos;m-product&apos;);renderProfile()">Voir mes points</button>'
+    +'</div></div>';
+  m.style.display = 'block';
 }
 
 function adminClients(sort) {
