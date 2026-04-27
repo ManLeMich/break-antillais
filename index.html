@@ -6615,6 +6615,15 @@ function removeClosedDate(i) {
   if(el) el.innerHTML = buildClosedDatesList();
   toast('Fermeture supprimee','info');
 }
+function toggleOffreMai() {
+  var cfg = getCfg();
+  cfg.offreMaiActive = (cfg.offreMaiActive === false) ? true : false;
+  save('ba_cfg', cfg);
+  db.ref('data/ba_cfg/offreMaiActive').set(cfg.offreMaiActive);
+  toast(cfg.offreMaiActive ? '🟡 Affiche activée !' : '⚫ Affiche désactivée', cfg.offreMaiActive ? 'success' : 'info', 2000);
+  document.getElementById('admin-content').innerHTML = adminConfig();
+}
+
 function toggleMaintenance() {
   var cfg = getCfg();
   cfg.maintenance = !cfg.maintenance;
@@ -6698,6 +6707,17 @@ function adminConfig(){
   var cfg=getCfg();
   return '<div style="padding:0 .9rem"><div class="sec-title mt-2">Parametres</div>'
     +'<div class="card mb-2">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:.8rem 1rem;'
+    +'background:'+(cfg.offreMaiActive!==false?'rgba(212,175,55,.1)':'rgba(255,255,255,.04)')+';'
+    +'border:1px solid '+(cfg.offreMaiActive!==false?'#D4AF37':'rgba(255,255,255,.1)')+';'
+    +'border-radius:var(--radius-sm);margin-bottom:.75rem">'
+    +'<div>'
+    +'<div class="fw-700" style="color:'+(cfg.offreMaiActive!==false?'#D4AF37':'var(--muted)')+'">'+(cfg.offreMaiActive!==false?'🟡 Affiche Trio Bokit ACTIVE':'⚫ Affiche Trio Bokit inactive')+'</div>'
+    +'<div class="text-sm text-muted">'+(cfg.offreMaiActive!==false?'Popup affiché au lancement':'Popup désactivé')+'</div>'
+    +'</div>'
+    +'<button class="btn btn-sm" style="background:'+(cfg.offreMaiActive!==false?'#78350f':'#166534')+';color:#fff" onclick="toggleOffreMai()">'+(cfg.offreMaiActive!==false?'Désactiver':'Activer')+'</button>'
+    +'</div>'
+
     +'<div style="display:flex;align-items:center;justify-content:space-between;padding:.8rem 1rem;background:'+(cfg.maintenance?'rgba(239,68,68,.1)':'rgba(16,185,129,.1)')+';border:1px solid '+(cfg.maintenance?'#ef4444':'#10b981')+';border-radius:var(--radius-sm);margin-bottom:.75rem">'
     +'<div><div class="fw-700" style="color:'+(cfg.maintenance?'#ef4444':'#10b981')+'">'+(cfg.maintenance?'🔴 Maintenance ACTIVE':'🟢 Boutique ouverte')+'</div>'
     +'<div class="text-sm text-muted">'+(cfg.maintenance?'Clients voient message fermeture':'Commandes ouvertes normalement')+'</div></div>'
@@ -8093,6 +8113,8 @@ function startCountdown() {
     
 // ── Affiche offre-mai.jpg au lancement ──
 function afficherOffreMai() {
+  var _cfg = getCfg();
+  if (_cfg.offreMaiActive === false) return;
   if (document.getElementById('popup-offre-mai')) return;
   var baseUrl = 'https://break-antillais.github.io/break-antillais/offre-mai.jpg';
   var overlay = document.createElement('div');
