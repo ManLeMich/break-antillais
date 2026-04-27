@@ -2064,7 +2064,7 @@ function continueOpenProduct(id) {
   _boxQtys = {};
   _pendingQty = 1;
   var mc = getMeatCount(p);
-  var isBox = p.cat === 'mini_bokit';
+  var isBox = p.cat === 'mini_bokit' && !p.noConfig;
   var needsConfig = ['bokit','crepe_salee','agoulou','enfant','enfant_agoulou'].indexOf(p.cat)>=0;
   var pSafeName = (p.name || '').replace(/\'/g, '');
   var modalVisualHtml = (p.image && p.image.indexOf('__firebase__') !== 0)
@@ -3965,7 +3965,6 @@ function adminPrepa() {
     crepe_salee: '🥞 Crèpes Salées',
     crepe_sucree:'🍫 Crèpes Sucrées',
     mini_bokit:  '📦 Mini Bokits',
-    offre_speciale: '🔥 Offres Spéciales',
     enfant:      '🧒 Menus Enfants',
     boisson:     '🥤 Boissons'
   };
@@ -4062,7 +4061,7 @@ function renderManualOrderModal() {
   var today = new Date().toISOString().split('T')[0];
   var slots = getSlots(today, cfg);
   var CAT_LABELS = {bokit:'🫓 Bokits',agoulou:'🌯 Agoulous',crepe_salee:'🥞 Crêpes Salées',crepe_sucree:'🍫 Crêpes Sucrées',mini_bokit:'📦 Mini Bokits',enfant:'🧒 Enfants',enfant_agoulou:'🌯🧒 Enfant Agoulou',boisson:'🥤 Boissons'};
-  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','offre_speciale','enfant','enfant_agoulou','boisson'];
+  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','enfant','enfant_agoulou','boisson'];
   var products = getProducts().filter(function(p){ return p.ok !== false; });
   var bycat = {};
   products.forEach(function(p){ if (!bycat[p.cat]) bycat[p.cat]=[]; bycat[p.cat].push(p); });
@@ -4967,13 +4966,18 @@ function prodForm(p){
     +'<input class="form-input" id="pf-p" type="number" step="0.01" value="'+(p.price||'')+'"/></div>'
     +'<div class="form-group"><label class="form-label">Description</label><input class="form-input" id="pf-d" value="'+(p.desc||'')+'"/></div>'
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="pf-ok"'+(p.ok?' checked':'')+' style="accent-color:var(--red)"> Disponible</label></div>'
-  +(p.cat==='boisson'||p.cat==='agoulou'||p.cat==='enfant_agoulou'||!p.cat?'<div class="form-group"><label class="form-label">'+(p.cat==='agoulou'?'📦 Stock pains agoulou (partagé entre toutes les variantes)':p.cat==='enfant_agoulou'?'🌯🧒 Stock Menu Enfant Agoulou':'Stock (laisser vide = illimité)')+'</label>'
+  +(p.cat==='boisson'||p.cat==='agoulou'||p.cat==='enfant_agoulou'||p.cat==='mini_bokit'||!p.cat?'<div class="form-group"><label class="form-label">'+(p.cat==='agoulou'?'📦 Stock pains agoulou (partagé entre toutes les variantes)':p.cat==='enfant_agoulou'?'🌯🧒 Stock Menu Enfant Agoulou':'Stock (laisser vide = illimité)')+'</label>'
     +'<div style="display:flex;gap:.5rem">'
     +'<input class="form-input" id="pf-stock" type="number" min="0" placeholder="Ex: 24" value="'+(p.stock!==null&&p.stock!==undefined?p.stock:'')+'" style="flex:2"/>'
     +'<input class="form-input" id="pf-stock-alert" type="number" min="0" placeholder="Alerte à" value="'+(p.stockAlert||3)+'" style="flex:1"/>'
     +'</div><div class="text-sm text-muted">Seuil d&apos;alerte (défaut: 3)</div></div>':'')
     +'<div class="form-group"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="pf-soon"'+(p.soon?' checked':'')+' style="accent-color:var(--red)"> Prochainement</label></div>'
-  +'<div class="form-group"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="pf-feat"'+(p.featured?' checked':'')+' style="accent-color:var(--gold)"> ⭐ Coup de coeur (mis en avant)</label></div>';
+  +'<div class="form-group"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer"><input type="checkbox" id="pf-feat"'+(p.featured?' checked':'')+' style="accent-color:var(--gold)"> ⭐ Coup de coeur (mis en avant)</label></div>'
+    +(p.cat==='mini_bokit' ? '<div style="margin-top:.35rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:.5rem .75rem">'
+      +'<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem;font-weight:600">'
+      +'<input type="checkbox" id="pf-noconfig"'+(p.noConfig?' checked':'')+'  style="accent-color:#f59e0b;width:15px;height:15px">'
+      +' 🎛 Désactiver le choix des saveurs'
+      +'</label></div>' : '');
 
   // If Bokit Classique - show meat editor
   if (p.isClassique) {
@@ -5079,7 +5083,8 @@ function getProdFormData(){
     featured: document.getElementById('pf-feat') ? document.getElementById('pf-feat').checked : false,
     stock: stockEl && stockEl.value!=='' ? parseInt(stockEl.value) : null,
     stockAlert: stockAlertEl && stockAlertEl.value!=='' ? parseInt(stockAlertEl.value) : 3,
-    allergens: Array.from(document.querySelectorAll('input[name="pf-allergen"]:checked')).map(function(el){return el.value;})
+    allergens: Array.from(document.querySelectorAll('input[name="pf-allergen"]:checked')).map(function(el){return el.value;}),
+    noConfig: document.getElementById('pf-noconfig') ? document.getElementById('pf-noconfig').checked : undefined
   };
 }
 function saveNewProd(){
@@ -8126,7 +8131,7 @@ function startCountdown() {
           document.getElementById('offre-add-btn').onclick = function(){
             var q = window._offreQtyVal || 1;
             for (var i = 0; i < q; i++) {
-              cart.push({id:genId(),pid:'trio_bokit',name:'Trio Bokit',price:9,cat:'offre_speciale',details:'Poulet - Steak - Morue',qty:1});
+              cart.push({id:genId(),pid:'trio_bokit',name:'Trio Bokit',price:9,cat:'mini_bokit',details:'Poulet - Steak - Morue',qty:1});
             }
             updateBadges();
             overlay.remove();
