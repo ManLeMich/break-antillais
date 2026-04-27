@@ -3965,6 +3965,7 @@ function adminPrepa() {
     crepe_salee: '🥞 Crèpes Salées',
     crepe_sucree:'🍫 Crèpes Sucrées',
     mini_bokit:  '📦 Mini Bokits',
+    offre_speciale: '🔥 Offres Spéciales',
     enfant:      '🧒 Menus Enfants',
     boisson:     '🥤 Boissons'
   };
@@ -4061,7 +4062,7 @@ function renderManualOrderModal() {
   var today = new Date().toISOString().split('T')[0];
   var slots = getSlots(today, cfg);
   var CAT_LABELS = {bokit:'🫓 Bokits',agoulou:'🌯 Agoulous',crepe_salee:'🥞 Crêpes Salées',crepe_sucree:'🍫 Crêpes Sucrées',mini_bokit:'📦 Mini Bokits',enfant:'🧒 Enfants',enfant_agoulou:'🌯🧒 Enfant Agoulou',boisson:'🥤 Boissons'};
-  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','enfant','enfant_agoulou','boisson'];
+  var catOrder = ['bokit','agoulou','crepe_salee','crepe_sucree','mini_bokit','offre_speciale','enfant','enfant_agoulou','boisson'];
   var products = getProducts().filter(function(p){ return p.ok !== false; });
   var bycat = {};
   products.forEach(function(p){ if (!bycat[p.cat]) bycat[p.cat]=[]; bycat[p.cat].push(p); });
@@ -8125,7 +8126,7 @@ function startCountdown() {
           document.getElementById('offre-add-btn').onclick = function(){
             var q = window._offreQtyVal || 1;
             for (var i = 0; i < q; i++) {
-              cart.push({id:genId(),pid:'trio_bokit',name:'Trio Bokit',price:9,cat:'mini_bokit',details:'Poulet - Steak - Morue',qty:1});
+              cart.push({id:genId(),pid:'trio_bokit',name:'Trio Bokit',price:9,cat:'offre_speciale',details:'Poulet - Steak - Morue',qty:1});
             }
             updateBadges();
             overlay.remove();
