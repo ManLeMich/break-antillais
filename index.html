@@ -8090,7 +8090,85 @@ function startCountdown() {
         toast('Code de parrainage detecte ! Inscrivez-vous pour profiter du bonus 🎁', 'success', 5000);
       }, 2000);
     }
-    setTimeout(function(){
+    
+// ── Affiche offre-mai.jpg au lancement ──
+function afficherOffreMai() {
+  if (document.getElementById('popup-offre-mai')) return;
+  var baseUrl = 'https://break-antillais.github.io/break-antillais/offre-mai.jpg';
+  var overlay = document.createElement('div');
+  overlay.id = 'popup-offre-mai';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  var qte = 1;
+  function monter(avecImg) {
+    var boite = document.createElement('div');
+    boite.style.cssText = 'max-width:400px;width:100%';
+    if (avecImg) {
+      var img = document.createElement('img');
+      img.src = baseUrl;
+      img.style.cssText = 'width:100%;border-radius:14px 14px 0 0;display:block;max-height:50vh;object-fit:cover';
+      boite.appendChild(img);
+    } else {
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'background:#1a0505;border-radius:14px 14px 0 0;padding:1.5rem;text-align:center;color:#fff;font-size:1.3rem;font-weight:900';
+      hdr.textContent = '🔥 Offre du mois';
+      boite.appendChild(hdr);
+    }
+    var bas = document.createElement('div');
+    bas.style.cssText = 'background:#111;border-radius:0 0 14px 14px;padding:.85rem 1rem';
+    var ligneQte = document.createElement('div');
+    ligneQte.style.cssText = 'display:flex;align-items:center;gap:.75rem;margin-bottom:.65rem';
+    var lblQte = document.createElement('span');
+    lblQte.textContent = 'Quantité';
+    lblQte.style.cssText = 'color:#888;font-size:.85rem;flex:1';
+    var spanQte = document.createElement('span');
+    spanQte.textContent = '1';
+    spanQte.style.cssText = 'font-weight:800;font-size:1.1rem;min-width:28px;text-align:center';
+    var btnM = document.createElement('button');
+    btnM.textContent = '−';
+    btnM.style.cssText = 'width:32px;height:32px;border-radius:50%;background:#222;border:1px solid #444;color:#fff;font-size:1.2rem;cursor:pointer';
+    btnM.onclick = function(){ if(qte>1){qte--;spanQte.textContent=qte;} };
+    var btnP = document.createElement('button');
+    btnP.textContent = '+';
+    btnP.style.cssText = 'width:32px;height:32px;border-radius:50%;background:#C8232B;border:none;color:#fff;font-size:1.2rem;cursor:pointer';
+    btnP.onclick = function(){ qte++;spanQte.textContent=qte; };
+    ligneQte.appendChild(lblQte);
+    ligneQte.appendChild(btnM);
+    ligneQte.appendChild(spanQte);
+    ligneQte.appendChild(btnP);
+    var btnAdd = document.createElement('button');
+    btnAdd.textContent = '🛒 Ajouter au panier';
+    btnAdd.style.cssText = 'width:100%;padding:.75rem;background:#C8232B;border:none;color:#fff;font-weight:800;font-size:.95rem;border-radius:8px;cursor:pointer;margin-bottom:.4rem;display:block';
+    btnAdd.onclick = function(){
+      var prods = getProducts();
+      var prod = prods.find(function(p){ return (p.id==='trio_bokit')||(p.name&&p.name.toLowerCase().indexOf('trio')>=0); });
+      if(!prod){ toast('Produit introuvable','error'); return; }
+      for(var i=0;i<qte;i++){
+        cart.push({id:genId(),pid:prod.id,name:prod.name,price:prod.price,cat:prod.cat,details:prod.desc||'',qty:1});
+      }
+      updateBadges();
+      overlay.remove();
+      toast('🔥 '+qte+' × '+prod.name+' ajouté'+(qte>1?'s':'')+' !','success',3000);
+      go('cart');
+    };
+    var btnClose = document.createElement('button');
+    btnClose.textContent = 'Fermer';
+    btnClose.style.cssText = 'width:100%;padding:.6rem;background:transparent;border:1px solid #333;color:#999;font-size:.85rem;border-radius:8px;cursor:pointer;display:block';
+    btnClose.onclick = function(){ overlay.remove(); };
+    bas.appendChild(ligneQte);
+    bas.appendChild(btnAdd);
+    bas.appendChild(btnClose);
+    boite.appendChild(bas);
+    overlay.appendChild(boite);
+    document.body.appendChild(overlay);
+  }
+  var t = new Image();
+  t.onload = function(){ monter(true); };
+  t.onerror = function(){ monter(false); };
+  t.src = baseUrl+'?t='+Date.now();
+}
+
+setTimeout(function(){
       var ls = document.getElementById('loading');
       var sh = document.getElementById('s-home');
       if (sh) { sh.classList.add('active','home-reveal'); }
@@ -8099,7 +8177,7 @@ function startCountdown() {
         ls.style.opacity = '0';
         setTimeout(function(){ ls.style.display='none'; document.body.classList.add('app-ready'); }, 400);
       }
-      lancerPopupTrioBokit();
+      afficherOffreMai();
 
     }, 1500);
     startOrderPolling();
