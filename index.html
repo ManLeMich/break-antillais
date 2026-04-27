@@ -1011,13 +1011,13 @@ var DEFAULT_CFG = {
   closedDates:[], // [{date:'2025-12-25', msg:'Ferme pour Noel'}]
   cgv:'CGV Break Antillais\nCommandes acceptees jusqu a 17h.\nRetrait 19h-22h.',
   rgpd:'Vos donnees sont utilisees uniquement pour la gestion des commandes.',
-  offreActive:false,
-  offreDebut:'',
-  offreNom:'',
-  offreDesc:'',
-  offrePrix:0,
-  offreImgUrl:'',
-  offreExpiry:'',
+  offreActive:true,
+  offreDebut:'2026-05-01',
+  offreNom:'Trio Bokit',
+  offreDesc:'Trio de Bokit garni au Poulet, au Steak et à la Morue',
+  offrePrix:9.00,
+  offreImgUrl:'https://break-antillais.github.io/break-antillais/offre-mai.jpg',
+  offreExpiry:'2026-05-30',
   offreStock:0
 };
 
@@ -7553,69 +7553,72 @@ function checkBirthdayOffer(user) {
   }).catch(function(e){ console.warn('[Bday] Erreur vérification:', e); });
 }
 
+
 // ══ OFFRE SPÉCIALE ══
 
 function showOffrePopup(cfg) {
-  var existing = document.getElementById('offre-popup');
-  if (existing) return;
-  var imgUrl = cfg.offreImgUrl || '';
+  if (document.getElementById("offre-popup")) return;
+  var nom = cfg.offreNom || '';
+  var desc = cfg.offreDesc || '';
   var prix = parseFloat(cfg.offrePrix) || 0;
+  var imgUrl = cfg.offreImgUrl || '';
+  window._offreQty = 1;
+  window._offreCfg = cfg;
 
-  function buildOverlay(withImg) {
-    var overlay = document.createElement('div');
-    overlay.id = 'offre-popup';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:1.25rem;animation:fadeIn .3s ease';
+  var overlay = document.createElement('div');
+  overlay.id = 'offre-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:1.25rem;animation:fadeIn .3s ease';
 
-    var content = '<div style="position:relative;max-width:420px;width:100%">';
+  function getContent(imgOk) {
+    var html = '<div style="position:relative;max-width:400px;width:100%">';
 
-    if (withImg) {
-      content += '<img src="'+imgUrl+'" style="width:100%;height:auto;border-radius:14px;display:block;box-shadow:0 20px 60px rgba(0,0,0,.9);pointer-events:none"/>';
+    if (imgOk) {
+      html += '<img src="'+imgUrl+'" style="width:100%;border-radius:14px 14px 0 0;display:block;max-height:50vh;object-fit:cover"/>';
     } else {
-      content += '<div style="background:linear-gradient(135deg,#1a0505,#0d0000);border:2px solid var(--red);border-radius:14px;padding:2rem 1.5rem;text-align:center">'
-        +'<div style="font-size:2rem;margin-bottom:.5rem">🔥</div>'
-        +'<div style="font-family:var(--head);font-size:1.4rem;font-weight:900;margin-bottom:.35rem">'+cfg.offreNom+'</div>'
-        +(cfg.offreDesc?'<div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">'+cfg.offreDesc+'</div>':'')
-        +(cfg.offreDebut||cfg.offreExpiry ? '<div style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">'
-          +(cfg.offreDebut?'Du '+new Date(cfg.offreDebut).toLocaleDateString("fr-FR",{day:"numeric",month:"long"})+' ':'')
-          +(cfg.offreExpiry?'au '+new Date(cfg.offreExpiry).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):'')
-          +'</div>' : '')
-        +'<div style="font-family:var(--head);font-size:2rem;font-weight:900;color:var(--gold)">'+fmt(prix)+'</div>'
+      html += '<div style="background:linear-gradient(135deg,#1a0505,#0d0000);border-radius:14px 14px 0 0;padding:1.5rem;text-align:center">'
+        +'<div style="font-size:2rem">🔥</div>'
+        +'<div style="font-family:var(--head);font-size:1.4rem;font-weight:900;margin:.25rem 0">'+nom+'</div>'
+        +'<div style="font-size:.85rem;color:var(--muted)">'+desc+'</div>'
         +'</div>';
     }
 
-    // Contrôles quantité + boutons
-    content += '<div style="background:rgba(0,0,0,.85);border-radius:0 0 14px 14px;padding:.85rem 1rem;'+(withImg?'':'margin-top:.75rem;border-radius:12px;background:var(--dark3)')+'">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">'
-      +'<span style="font-family:var(--head);font-weight:800;font-size:.95rem">'+cfg.offreNom+'</span>'
-      +'<span style="font-family:var(--head);font-weight:900;color:var(--gold);font-size:1.1rem">'+fmt(prix)+'</span>'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.65rem">'
-      +'<span style="font-size:.82rem;color:var(--muted)">Quantité :</span>'
-      +'<button onclick="offreQty(-1)" style="width:30px;height:30px;border-radius:50%;background:var(--dark3);border:1px solid var(--border);color:var(--text);font-size:1.1rem;cursor:pointer">−</button>'
-      +'<span id="offre-qty-val" style="font-family:var(--head);font-weight:800;font-size:1.1rem;min-width:24px;text-align:center">1</span>'
-      +'<button onclick="offreQty(1)" style="width:30px;height:30px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:1.1rem;cursor:pointer">+</button>'
-      +'</div>'
-      +'<button onclick="offreAddToCart()" class="btn btn-primary btn-full" style="margin-bottom:.4rem">🛒 Ajouter au panier</button>'
-      +'<button onclick="document.getElementById(\'offre-popup\').remove()" class="btn btn-secondary btn-full" style="font-size:.85rem">Fermer</button>'
-      +'</div>';
+    html += '<div style="background:var(--dark2,#111);border-radius:0 0 14px 14px;padding:.85rem 1rem">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">';
+    html += '<div><div style="font-family:var(--head);font-weight:800;font-size:1rem">'+nom+'</div>';
+    html += '<div style="font-size:.78rem;color:var(--muted)">'+desc+'</div></div>';
+    html += '<div style="font-family:var(--head);font-weight:900;font-size:1.2rem;color:#D4AF37">'+fmt(prix)+'</div>';
+    html += '</div>';
 
-    content += '</div>';
-    overlay.innerHTML = content;
-    overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+    // Sélecteur quantité
+    html += '<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.65rem">';
+    html += '<span style="font-size:.82rem;color:var(--muted);flex:1">Quantité</span>';
+    html += '<button onclick="offreQty(-1)" style="width:32px;height:32px;border-radius:50%;background:#1a1a1a;border:1px solid rgba(255,255,255,.15);color:#fff;font-size:1.2rem;cursor:pointer;line-height:1">−</button>';
+    html += '<span id="offre-qty-val" style="font-family:var(--head);font-weight:800;font-size:1.1rem;min-width:24px;text-align:center">1</span>';
+    html += '<button onclick="offreQty(1)" style="width:32px;height:32px;border-radius:50%;background:#C8232B;border:none;color:#fff;font-size:1.2rem;cursor:pointer;line-height:1">+</button>';
+    html += '</div>';
+
+    // Boutons
+    html += '<button onclick="offreAddToCart()" style="width:100%;padding:.75rem;background:#C8232B;border:none;color:#fff;font-family:var(--head);font-weight:800;font-size:.95rem;border-radius:8px;cursor:pointer;margin-bottom:.4rem">🛒 Ajouter au panier</button>';
+    html += '<button onclick="document.getElementById("offre-popup").remove()" style="width:100%;padding:.6rem;background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);font-family:var(--head);font-weight:600;font-size:.85rem;border-radius:8px;cursor:pointer">Fermer</button>';
+    html += '</div></div>';
+    return html;
+  }
+
+  // Tester l'image
+  if (imgUrl && imgUrl.indexOf('http') === 0) {
+    var testImg = new Image();
+    testImg.onload = function() { overlay.innerHTML = getContent(true); document.body.appendChild(overlay); };
+    testImg.onerror = function() { overlay.innerHTML = getContent(false); document.body.appendChild(overlay); };
+    testImg.src = imgUrl + '?t=' + Date.now();
+  } else {
+    overlay.innerHTML = getContent(false);
     document.body.appendChild(overlay);
   }
 
-  window._offreQty = 1;
-
-  if (imgUrl && imgUrl.indexOf('http') === 0) {
-    var testImg = new Image();
-    testImg.onload = function(){ buildOverlay(true); };
-    testImg.onerror = function(){ buildOverlay(false); };
-    testImg.src = imgUrl;
-  } else {
-    buildOverlay(false);
-  }
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
 }
+
+function closeOffrePopup() { var p=document.getElementById("offre-popup"); if(p) p.remove(); }
 
 function offreQty(delta) {
   window._offreQty = Math.max(1, (window._offreQty||1) + delta);
@@ -7624,35 +7627,26 @@ function offreQty(delta) {
 }
 
 function offreAddToCart() {
-  var cfg = getCfg();
-  if (!cfg.offreNom) return;
+  var cfg = window._offreCfg || getCfg();
   var qty = window._offreQty || 1;
   var prix = parseFloat(cfg.offrePrix) || 0;
   for (var i = 0; i < qty; i++) {
-    cart.push({
-      id: genId(),
-      pid: '__offre__',
-      name: cfg.offreNom,
-      price: prix,
-      cat: 'offre',
-      details: cfg.offreDesc || '',
-      qty: 1
-    });
+    cart.push({id:genId(), pid:'__offre__', name:cfg.offreNom,
+      price:prix, cat:'offre', details:cfg.offreDesc||'', qty:1});
   }
   updateBadges();
-  var popup = document.getElementById('offre-popup');
-  if (popup) popup.remove();
-  toast('🔥 '+qty+' × '+cfg.offreNom+' ajouté'+(qty>1?'s':'')+' au panier !', 'success', 3000);
+  var pop = document.getElementById("offre-popup");
+  if (pop) pop.remove();
+  toast('🔥 '+qty+' × '+cfg.offreNom+' ajouté'+(qty>1?'s':'')+' !','success',3000);
   go('cart');
 }
 
-// ── Admin config offre ──
 function adminDesactiverOffre() {
   var cfg = getCfg();
   cfg.offreActive = false;
   save('ba_cfg', cfg);
   db.ref('data/ba_cfg/offreActive').set(false);
-  toast('Offre désactivée', 'info', 2000);
+  toast('Offre désactivée','info',2000);
   document.getElementById('admin-content').innerHTML = adminConfig();
 }
 
@@ -7665,24 +7659,18 @@ function adminSaveOffre() {
   var expiry = (document.getElementById('off-expiry')||{}).value||'';
   var stock = parseInt((document.getElementById('off-stock')||{}).value)||0;
   var active = (document.getElementById('off-active')||{}).checked;
-
-  if (!nom) { toast('Nom de l\'offre requis','error'); return; }
+  if (!nom) { toast('Nom requis','error'); return; }
   if (!prix) { toast('Prix requis','error'); return; }
-
   var cfg = getCfg();
-  cfg.offreActive = active;
-  cfg.offreNom = nom;
-  cfg.offreDesc = desc;
-  cfg.offrePrix = prix;
-  cfg.offreImgUrl = imgUrl;
-  cfg.offreDebut = debut || '';
-  cfg.offreExpiry = expiry || '';
-  cfg.offreStock = stock;
-  save('ba_cfg', cfg);
+  cfg.offreActive=active; cfg.offreNom=nom; cfg.offreDesc=desc;
+  cfg.offrePrix=prix; cfg.offreImgUrl=imgUrl; cfg.offreDebut=debut;
+  cfg.offreExpiry=expiry; cfg.offreStock=stock;
+  save('ba_cfg',cfg);
   db.ref('data/ba_cfg').set(cfg);
-  toast('Offre '+(active?'activée':'sauvegardée')+' !', 'success', 3000);
+  toast('Offre '+(active?'activée':'sauvegardée')+' !','success',3000);
   document.getElementById('admin-content').innerHTML = adminConfig();
 }
+
 
 function showBirthdayModal(prenom, pts, total) {
   var m = document.getElementById('m-product');
