@@ -680,6 +680,42 @@ function startFirebaseListeners() {
   console.log('[Firebase] Starting listeners, user:', user ? user.prenom : 'none', 'isAdmin:', isAdmin);
 
   // Real-time orders sync - with status change detection
+  // Listener viandes temps réel — met à jour les chips si la modale est ouverte
+  db.ref('data/ba_meats').on('value', function(snap){
+    var v = snap.val();
+    if (!v) return;
+    var arr = Array.isArray(v) ? v : Object.values(v).filter(function(x){ return x && x.name; });
+    if (arr.length) {
+      try { localStorage.setItem('_ba_ba_meats', JSON.stringify(arr)); } catch(e){}
+      // Mettre à jour les chips viande si la modale produit est ouverte
+      var chips = document.querySelectorAll('#meat-chips .chip');
+      if (chips.length) {
+        chips.forEach(function(chip) {
+          var meatName = chip.dataset.v;
+          var meat = arr.find(function(m){ return m.name === meatName; });
+          if (!meat) return;
+          if (!meat.ok) {
+            chip.disabled = true;
+            chip.style.opacity = '.4';
+            chip.style.cursor = 'not-allowed';
+            chip.style.pointerEvents = 'none';
+            chip.classList.remove('on');
+            // Retirer du pendingExtras si sélectionné
+            if (pendingExtras && pendingExtras.meats) {
+              var i = pendingExtras.meats.indexOf(meatName);
+              if (i >= 0) pendingExtras.meats.splice(i, 1);
+            }
+          } else {
+            chip.disabled = false;
+            chip.style.opacity = '';
+            chip.style.cursor = '';
+            chip.style.pointerEvents = '';
+          }
+        });
+      }
+    }
+  });
+
   db.ref('data/ba_orders').on('value', function(snap){
     var v = snap.val();
     if (v === null || v === undefined) return;
@@ -2289,6 +2325,14 @@ function getMeatCount(p) {
   return 0;
 }
 function toggleMeat(btn, max) {
+  // Bloquer si viande indisponible
+  if (btn.disabled || btn.hasAttribute('disabled')) return;
+  var meats = getMeats();
+  var meat = meats.find(function(m){ return m.name === btn.dataset.v; });
+  if (meat && !meat.ok) {
+    toast(btn.dataset.v + ' est indisponible', 'error', 2000);
+    return;
+  }
   var v=btn.dataset.v, idx=pendingExtras.meats.indexOf(v);
   if(idx>=0){pendingExtras.meats.splice(idx,1);btn.classList.remove('on');}
   else if(pendingExtras.meats.length<max){pendingExtras.meats.push(v);btn.classList.add('on');}
