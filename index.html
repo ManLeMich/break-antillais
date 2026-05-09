@@ -5011,27 +5011,9 @@ function adminProducts(){
       +'<button class="btn btn-danger btn-sm" data-pid="'+p.id+'" onclick="deleteProd(this.dataset.pid)" style="font-size:.7rem;padding:.3rem .5rem">🗑</button>'
       +'</div></div></div>';
   });
-  // Avis clients
-  var ratings = load('ba_ratings',[]);
-  // Also check Firebase
-  if(ratings.length){
-    html+='<div class="sec-title">⭐ Avis clients ('+ratings.length+')</div>';
-    var avgNote = ratings.reduce(function(s,r){return s+r.note;},0)/ratings.length;
-    html+='<div style="text-align:center;padding:.75rem;background:var(--dark3);border-radius:var(--radius);margin-bottom:.75rem">'
-      +'<div style="font-size:2rem;font-weight:800;color:var(--gold)">'+avgNote.toFixed(1)+'/5</div>'
-      +'<div class="text-sm text-muted">Note moyenne sur '+ratings.length+' avis</div></div>';
-    ratings.slice(0,10).forEach(function(r){
-      html+='<div style="background:var(--dark3);border-radius:8px;padding:.65rem .85rem;margin-bottom:.35rem">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center">'
-        +'<span class="fw-700 text-sm">'+r.userName+'</span>'
-        +'<span style="color:var(--gold)">'+'⭐'.repeat(r.note)+'</span></div>'
-        +(r.comment?'<div class="text-sm text-muted mt-1">'+r.comment+'</div>':'')
-        +'<div style="font-size:.7rem;color:var(--muted);margin-top:.25rem">'+new Date(r.at).toLocaleDateString('fr-FR')+'</div>'
-        +'</div>';
-    });
-  }
   return html+'</div>';
 }
+
 function toggleProd(input){
   var prods=getProducts();
   var p=prods.find(function(x){return x.id===input.dataset.pid;});
