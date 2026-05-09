@@ -681,6 +681,30 @@ function startFirebaseListeners() {
 
   // Real-time orders sync - with status change detection
   // Listener viandes temps réel — met à jour les chips si la modale est ouverte
+  // Listener stock agoulou centralisé
+  db.ref('data/ba_agoulou_stock').on('value', function(snap){
+    var v = snap.val();
+    if (!v && v !== 0) return;
+    var st = (typeof v === 'object') ? v.stock : v;
+    var ok = (typeof v === 'object') ? v.ok : (st > 0);
+    save('ba_agoulou_stock', st);
+    // Mettre à jour tous les agoulou en local
+    var prods = load('ba_products', []);
+    if (!Array.isArray(prods)) prods = Object.values(prods);
+    var changed = false;
+    prods.forEach(function(p){
+      if (p && p.cat === 'agoulou') {
+        p.stock = st;
+        p.ok = ok && (st === null || st > 0);
+        changed = true;
+      }
+    });
+    if (changed) {
+      try { localStorage.setItem('_ba_ba_products', JSON.stringify(prods)); } catch(e){}
+      if (typeof renderHome === 'function' && document.getElementById('home-body')) renderHome();
+    }
+  });
+
   db.ref('data/ba_meats').on('value', function(snap){
     var v = snap.val();
     if (!v) return;
@@ -1171,6 +1195,32 @@ function saveOrder(order) {
   // Déclencher snapshot différé (sans bloquer)
   setTimeout(function(){ if (typeof snapshotAll === 'function') snapshotAll(); }, 3000);
 }
+// ── Stock Agoulou centralisé ──
+function getAgoulouStock() {
+  var v = load('ba_agoulou_stock', null);
+  if (v !== null && v !== undefined) return v;
+  // Fallback : lire sur le premier agoulou
+  var prods = load('ba_products', []);
+  if (!Array.isArray(prods)) prods = Object.values(prods);
+  var a = prods.find(function(p){ return p && p.cat === 'agoulou' && p.stock !== null && p.stock !== undefined; });
+  return a ? a.stock : null;
+}
+
+function setAgoulouStock(stock, okVal) {
+  save('ba_agoulou_stock', stock);
+  db.ref('data/ba_agoulou_stock').set({stock: stock, ok: okVal !== false});
+  // Propager sur tous les produits agoulou
+  var prods = getProducts().filter(function(p){ return p.cat === 'agoulou'; });
+  prods.forEach(function(p) {
+    p.stock = stock;
+    p.ok = (stock === null || stock > 0) && (okVal !== false);
+    saveProduct(p);
+    db.ref('data/ba_products/'+p.id).update({stock: stock, ok: p.ok});
+  });
+  renderHome();
+}
+
+
 function saveProduct(p) {
   var pToSave = Object.assign({}, p);
   // Si stock = 0, forcer ok = false
@@ -5150,18 +5200,8 @@ function saveEditProd(id){
     saveProduct(p);
     // Si c'est un agoulou, propager le stock à toutes les variantes
     if (p.cat === 'agoulou') {
-      var allAgoulou = getProducts().filter(function(x){ return x.cat==='agoulou'; });
-      allAgoulou.forEach(function(ag){
-        if (ag.id === p.id) return; // déjà sauvegardé
-        ag.stock = p.stock;
-        ag.stockAlert = p.stockAlert;
-        // Même disponibilité si stock épuisé
-        if (p.stock === 0) ag.ok = false;
-        else if (p.ok) ag.ok = true;
-        saveProduct(ag);
-        db.ref('data/ba_products/'+ag.id+'/stock').set(p.stock);
-        db.ref('data/ba_products/'+ag.id+'/ok').set(ag.ok);
-      });
+      // Écriture centralisée dans ba_agoulou_stock
+      setAgoulouStock(p.stock, p.ok);
     }
   }
   _newImg=null; closeModal('m-product');
